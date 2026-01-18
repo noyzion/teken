@@ -963,6 +963,16 @@ async function loadSchedule() {
     }
 }
 
+function toggleEditMode() {
+    editMode = !editMode;
+    const btn = document.getElementById('editModeBtn');
+    if (btn) {
+        btn.textContent = editMode ? 'יציאה ממצב עריכה' : 'מצב עריכה';
+        btn.querySelector('span').textContent = editMode ? 'יציאה ממצב עריכה' : 'מצב עריכה';
+    }
+    displaySchedule();
+}
+
 function displaySchedule() {
     console.log('=== displaySchedule - התחלה ===');
     console.log('לוח זמנים נוכחי:', schedule);
