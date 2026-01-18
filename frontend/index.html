@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מערכת ניהול משמרות</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>מערכת ניהול משמרות</h1>
+                <p class="subtitle">ניהול חכם ויעיל של חלוקת משמרות</p>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="settings">
+                <span>הגדרות</span>
+            </button>
+            <button class="tab-btn" data-tab="positions">
+                <span>עמדות</span>
+            </button>
+            <button class="tab-btn" data-tab="soldiers">
+                <span>חיילים</span>
+            </button>
+            <button class="tab-btn" data-tab="constraints">
+                <span>אילוצים</span>
+            </button>
+            <button class="tab-btn" data-tab="schedule">
+                <span>תזמון</span>
+            </button>
+            <button class="tab-btn" data-tab="view">
+                <span>לוח זמנים</span>
+            </button>
+            <button class="tab-btn" data-tab="saved">
+                <span>לוחות שמורים</span>
+            </button>
+        </nav>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content active">
+            <div class="card">
+                <h2>הגדרות כלליות</h2>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">מספר שעות לשמירה (גלובלי לכל העמדות)</span>
+                        <input type="number" id="globalShiftHours" min="1" value="8" class="modern-input">
+                    </label>
+                </div>
+                <button class="btn-primary" onclick="saveSettings()">
+                    <span>שמור הגדרות</span>
+                </button>
+                <div id="settingsStatus"></div>
+            </div>
+        </div>
+
+        <!-- Positions Tab -->
+        <div id="positions" class="tab-content">
+            <div class="card">
+                <h2>הגדרת עמדות</h2>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">שם העמדה</span>
+                        <input type="text" id="positionName" placeholder="למשל: ש.ג, אחורי, כ"כ" class="modern-input" onkeypress="if(event.key==='Enter') addPosition()">
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="positionRequiresCommander" class="modern-checkbox">
+                        <span class="label-text">דורש מפקד בלבד</span>
+                    </label>
+                    <small class="input-hint">סמן אם עמדה זו מיועדת למפקדים בלבד</small>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="positionIsStandby" class="modern-checkbox">
+                        <span class="label-text">כוננות (יכול להיות רצוף)</span>
+                    </label>
+                    <small class="input-hint">סמן אם זו עמדת כוננות - ניתן לשבץ רצוף. אם לא מסומן, זו עמדת שמירה שדורשת רווח בין משמרות</small>
+                </div>
+                <button class="btn-primary" onclick="addPosition()">
+                    <span>הוסף עמדה</span>
+                </button>
+                <div id="positionsList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Soldiers Tab -->
+        <div id="soldiers" class="tab-content">
+            <div class="card">
+                <h2>הוספת חיילים</h2>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">הוסף חיילים (אחד אחד או הדבק רשימה)</span>
+                        <div class="input-tabs">
+                            <button class="input-tab active" onclick="switchSoldierInput('single')">חייל בודד</button>
+                            <button class="input-tab" onclick="switchSoldierInput('multiple')">הדבק רשימה</button>
+                        </div>
+                        <input type="text" id="soldierName" placeholder="הזן שם חייל" class="modern-input" onkeypress="if(event.key==='Enter') addSoldier()">
+                        <textarea id="soldiersListInput" placeholder="הדבק כאן רשימת שמות (שורה אחת או מופרדים בפסיק/רווח)&#10;למשל:&#10;יוסי כהן&#10;דני לוי&#10;או: יוסי כהן, דני לוי, משה ישראלי" class="modern-textarea" style="display: none;"></textarea>
+                        <small class="input-hint">ניתן להדביק רשימה ארוכה של שמות בבת אחת</small>
+                    </label>
+                </div>
+                <div class="form-group" id="singleSoldierCommanderGroup">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="soldierIsCommander" class="modern-checkbox">
+                        <span class="label-text">מפקד</span>
+                    </label>
+                </div>
+                <div class="form-group" id="multipleSoldiersCommanderGroup" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="markAllAsCommanders" class="modern-checkbox">
+                        <span class="label-text">סמן את כל החיילים כמפקדים</span>
+                    </label>
+                </div>
+                <button class="btn-primary" onclick="addSoldier()">
+                    <span>הוסף חייל</span>
+                </button>
+                <button class="btn-secondary" onclick="addMultipleSoldiers()" style="display: none;" id="addMultipleBtn">
+                    <span>הוסף את כל החיילים</span>
+                </button>
+                <div id="soldiersList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Constraints Tab -->
+        <div id="constraints" class="tab-content">
+            <div class="card">
+                <h2>הגדרת אילוצים</h2>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">בחר חייל</span>
+                        <select id="constraintSoldier" class="modern-select"></select>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">ימים שהחייל לא נמצא (סמן ימים שלמים שהחייל לא נמצא בהם)</span>
+                        <div id="forbiddenDaysGroup" class="checkbox-group"></div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">שעות אסורות לפי יום (בחר יום ואז סמן את השעות האסורות באותו יום)</span>
+                        <div class="day-hours-selector">
+                            <div class="day-selector-tabs" id="daySelectorTabs"></div>
+                            <div id="hoursForDayGroup" class="hours-group"></div>
+                        </div>
+                        <small class="input-hint">בחר יום מהרשימה למעלה ואז סמן את השעות האסורות באותו יום</small>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">עמדות אסורות (סמן רק עמדות שהחייל לא יכול לשמור בהן)</span>
+                        <div id="forbiddenPositions" class="checkbox-group"></div>
+                    </label>
+                </div>
+                <button class="btn-primary" onclick="saveConstraints()">
+                    <span>שמור אילוצים</span>
+                </button>
+                <div id="constraintsList" class="list"></div>
+            </div>
+        </div>
+
+        <!-- Schedule Tab -->
+        <div id="schedule" class="tab-content">
+            <div class="card">
+                <h2>יצירת לוח זמנים</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">תאריך התחלה</span>
+                            <input type="date" id="startDate" class="modern-input">
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">שעת התחלה (אופציונלי)</span>
+                            <input type="number" id="startHour" class="modern-input" min="0" max="23" placeholder="השאר ריק ליום מלא">
+                            <small class="input-hint">שעה (0-23). השאר ריק כדי להתחיל מ-00:00</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">תאריך סיום</span>
+                            <input type="date" id="endDate" class="modern-input">
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">שעת סיום (אופציונלי)</span>
+                            <input type="number" id="endHour" class="modern-input" min="0" max="23" placeholder="השאר ריק ליום מלא">
+                            <small class="input-hint">שעה (0-23). השאר ריק כדי לסיים ב-23:59</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="info-box">
+                    <span class="info-icon">ℹ</span>
+                    <span>מספר המשמרות ביום יחושב אוטומטית לפי מספר העמדות, כך שיהיה מרווח מקסימלי בין משמרות לכל חייל. ניתן להגדיר שעות התחלה וסיום ספציפיות.</span>
+                </div>
+                <button class="btn-primary btn-large" onclick="generateSchedule()">
+                    <span>צור לוח זמנים</span>
+                </button>
+                <div id="scheduleStatus"></div>
+            </div>
+        </div>
+
+        <!-- View Schedule Tab -->
+        <div id="view" class="tab-content">
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">לוח זמנים</h2>
+                    <button class="btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
+                        <span>מצב עריכה</span>
+                    </button>
+                </div>
+                <div id="scheduleView" class="schedule-view"></div>
+            </div>
+        </div>
+
+        <!-- Saved Schedules Tab -->
+        <div id="saved" class="tab-content">
+            <div class="card">
+                <h2>לוחות זמנים שמורים</h2>
+                
+                <!-- Save Current Schedule -->
+                <div class="card" style="margin-bottom: 30px;">
+                    <h3>שמור לוח זמנים נוכחי</h3>
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">שם לוח זמנים</span>
+                            <input type="text" id="scheduleName" class="modern-input" placeholder="למשל: לוח ינואר 2024">
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">תיאור (אופציונלי)</span>
+                            <textarea id="scheduleDescription" class="modern-textarea" placeholder="תיאור קצר של הלוח..."></textarea>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="scheduleIsShared" class="modern-checkbox">
+                            <span class="label-text">שתף לוח זמנים זה</span>
+                        </label>
+                    </div>
+                    <button class="btn-primary" onclick="saveCurrentSchedule()">
+                        <span>שמור לוח זמנים</span>
+                    </button>
+                </div>
+                
+                <!-- Load Saved Schedules -->
+                <div class="card">
+                    <h3>לוחות זמנים שמורים</h3>
+                    <div id="savedSchedulesList" class="list"></div>
+                </div>
+                
+                <!-- Shared Schedules -->
+                <div class="card" style="margin-top: 30px;">
+                    <h3>לוחות זמנים משותפים</h3>
+                    <div class="form-group">
+                        <label class="input-label">
+                            <span class="label-text">טען לוח זמנים משותף לפי קוד</span>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="text" id="shareCodeInput" class="modern-input" placeholder="הזן קוד שיתוף (6 תווים)" maxlength="6" style="text-transform: uppercase;">
+                                <button class="btn-primary" onclick="loadSharedSchedule()">טען</button>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="sharedSchedulesList" class="list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Modal -->
+        <div id="editModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="editModalTitle">עריכת שיבוץ</h3>
+                    <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="editModalContent"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
