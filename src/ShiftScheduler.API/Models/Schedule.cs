@@ -39,5 +39,5 @@ public class DaySchedule
 /// </summary>
 public class SchedulerSettings
 {
-    public int ShiftHours { get; set; } = 8;
+    public double ShiftHours { get; set; } = 8;
 }

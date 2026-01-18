@@ -5,6 +5,7 @@ let soldiers = [];
 let schedule = [];
 let settings = { shiftHours: 8 };
 let editMode = false;
+let scheduleHistory = []; // היסטוריית שינויים לביטול
 
 const DAYS_OF_WEEK = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 let selectedDayForHours = null; // יום נבחר לבחירת שעות
@@ -154,10 +155,10 @@ async function loadSettings() {
 }
 
 async function saveSettings() {
-    const shiftHours = parseInt(document.getElementById('globalShiftHours').value);
+    const shiftHours = parseFloat(document.getElementById('globalShiftHours').value);
 
-    if (!shiftHours || shiftHours < 1) {
-        showNotification('אנא הזן מספר שעות תקין', 'error');
+    if (!shiftHours || shiftHours < 0.5) {
+        showNotification('אנא הזן מספר שעות תקין (מינימום 0.5)', 'error');
         return;
     }
 
@@ -220,7 +221,7 @@ async function addPosition() {
         return;
     }
 
-    const newPosition = { 
+    const newPosition = {
         name: name,
         requiresCommander: requiresCommander,
         isStandby: isStandby
@@ -284,7 +285,7 @@ function displayPositions() {
                     <input type="checkbox" class="position-checkbox" value="${pos.id}" onchange="updatePositionSelection()">
                 </label>
                 <div>
-                    <strong>${pos.name}</strong>
+                <strong>${pos.name}</strong>
                     ${pos.requiresCommander ? '<span style="margin-right: 8px; padding: 4px 8px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 0.85em; font-weight: 600;">דורש מפקד</span>' : ''}
                     ${pos.isStandby ? '<span style="margin-right: 8px; padding: 4px 8px; background: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 0.85em; font-weight: 600;">כוננות</span>' : '<span style="margin-right: 8px; padding: 4px 8px; background: #fce7f3; color: #831843; border-radius: 6px; font-size: 0.85em; font-weight: 600;">שמירה</span>'}
                 </div>
@@ -521,18 +522,18 @@ async function addSoldierByName(name, isCommander = false) {
         constraints: {}
     };
 
-    const response = await fetch(`${API_BASE}/soldiers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSoldier)
-    });
+        const response = await fetch(`${API_BASE}/soldiers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newSoldier)
+        });
 
-    if (response.ok) {
-        const created = await response.json();
-        soldiers.push(created);
+        if (response.ok) {
+            const created = await response.json();
+            soldiers.push(created);
         return created;
-    } else {
-        const error = await response.text();
+        } else {
+            const error = await response.text();
         throw new Error(error);
     }
 }
@@ -640,7 +641,7 @@ function updateConstraintsUI() {
         soldiers.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
     const forbiddenPositionsDiv = document.getElementById('forbiddenPositions');
-    
+
     forbiddenPositionsDiv.innerHTML = positions.map(pos => `
         <label>
             <input type="checkbox" value="${pos.id}" class="forbidden-pos">
@@ -966,9 +967,23 @@ async function loadSchedule() {
 function toggleEditMode() {
     editMode = !editMode;
     const btn = document.getElementById('editModeBtn');
+    const undoBtn = document.getElementById('undoBtn');
     if (btn) {
-        btn.textContent = editMode ? 'יציאה ממצב עריכה' : 'מצב עריכה';
-        btn.querySelector('span').textContent = editMode ? 'יציאה ממצב עריכה' : 'מצב עריכה';
+        const span = btn.querySelector('span');
+        if (span) {
+            span.textContent = editMode ? 'יציאה ממצב עריכה' : 'מצב עריכה';
+        }
+    }
+    if (undoBtn) {
+        undoBtn.style.display = editMode ? 'inline-block' : 'none';
+    }
+    if (!editMode) {
+        // ניקוי היסטוריה כשעוזבים מצב עריכה
+        scheduleHistory = [];
+        updateUndoButton();
+    } else {
+        // שמירת המצב הראשוני כשנכנסים למצב עריכה
+        saveScheduleState();
     }
     displaySchedule();
 }
@@ -994,7 +1009,7 @@ function displaySchedule() {
         `;
         return;
     }
-    
+
     console.log('מתחיל לבנות טבלה...');
 
     // Get all unique dates and positions
@@ -1206,14 +1221,14 @@ function displaySchedule() {
             }
             
             const startTime = new Date(start).toLocaleTimeString('he-IL', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
             const endTime = new Date(end).toLocaleTimeString('he-IL', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-            
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+
             tableHTML += `<tr>`;
             
             // Day column (merged for first shift of the day)
@@ -1439,6 +1454,89 @@ function highlightSoldier(soldierId) {
     });
 }
 
+// Validation Functions
+function isSoldierAssignedInShift(soldierId, date, shiftNumber) {
+    if (!soldierId || !schedule || schedule.length === 0) return false;
+    
+    const daySchedule = schedule.find(item => {
+        const itemDate = item.date || item.Date;
+        const itemShiftNumber = item.shiftNumber !== undefined ? item.shiftNumber : item.ShiftNumber;
+        return itemDate === date && itemShiftNumber === shiftNumber;
+    });
+    
+    if (!daySchedule) return false;
+    
+    const assignments = daySchedule.assignments || daySchedule.Assignments || [];
+    return assignments.some(assignment => {
+        if (!assignment) return false;
+        const assignmentSoldierId = assignment.soldierId || assignment.SoldierId;
+        return assignmentSoldierId === soldierId;
+    });
+}
+
+function getSoldierAssignmentInShift(soldierId, date, shiftNumber) {
+    if (!soldierId || !schedule || schedule.length === 0) return null;
+    
+    const daySchedule = schedule.find(item => {
+        const itemDate = item.date || item.Date;
+        const itemShiftNumber = item.shiftNumber !== undefined ? item.shiftNumber : item.ShiftNumber;
+        return itemDate === date && itemShiftNumber === shiftNumber;
+    });
+    
+    if (!daySchedule) return null;
+    
+    const assignments = daySchedule.assignments || daySchedule.Assignments || [];
+    return assignments.find(assignment => {
+        if (!assignment) return false;
+        const assignmentSoldierId = assignment.soldierId || assignment.SoldierId;
+        return assignmentSoldierId === soldierId;
+    });
+}
+
+// Undo/Redo Functions
+function saveScheduleState() {
+    // שמירת עותק עמוק של הלוח הנוכחי
+    const scheduleCopy = JSON.parse(JSON.stringify(schedule));
+    scheduleHistory.push(scheduleCopy);
+    // הגבלת ההיסטוריה ל-50 שינויים אחרונים
+    if (scheduleHistory.length > 50) {
+        scheduleHistory.shift();
+    }
+    updateUndoButton();
+}
+
+function undoLastChange() {
+    if (scheduleHistory.length === 0) {
+        showNotification('אין שינויים לביטול', 'warning');
+        return;
+    }
+    
+    // החזרת המצב הקודם
+    const previousState = scheduleHistory.pop();
+    schedule = JSON.parse(JSON.stringify(previousState));
+    displaySchedule();
+    updateUndoButton();
+    showNotification('שינוי אחרון בוטל', 'success');
+}
+
+function updateUndoButton() {
+    const undoBtn = document.getElementById('undoBtn');
+    if (undoBtn) {
+        const span = undoBtn.querySelector('span');
+        if (span) {
+            if (scheduleHistory.length > 0) {
+                undoBtn.disabled = false;
+                undoBtn.style.opacity = '1';
+                undoBtn.style.cursor = 'pointer';
+            } else {
+                undoBtn.disabled = true;
+                undoBtn.style.opacity = '0.5';
+                undoBtn.style.cursor = 'not-allowed';
+            }
+        }
+    }
+}
+
 // Edit Mode Functions
 function openEditCell(date, shiftNumber, positionId, currentSoldierId, currentSoldierName, positionName) {
     const modal = document.getElementById('editModal');
@@ -1465,7 +1563,7 @@ function openEditCell(date, shiftNumber, positionId, currentSoldierId, currentSo
                     החלף חייל בכל המשמרות שלו
                 </button>
                 ` : ''}
-            </div>
+                                    </div>
         </div>
     `;
     
@@ -1488,7 +1586,11 @@ function openReplaceSingleShift(date, shiftNumber, positionId, positionName, old
     selectHTML += '<option value="">-- בחר חייל --</option>';
     soldiers.forEach(soldier => {
         if (soldier.id !== oldSoldierId) {
-            selectHTML += `<option value="${soldier.id}">${soldier.name}</option>`;
+            // בדיקה אם החייל כבר משובץ בשעה זו
+            const isAssigned = isSoldierAssignedInShift(soldier.id, date, shiftNumber);
+            const disabled = isAssigned ? 'disabled' : '';
+            const assignedText = isAssigned ? ' (כבר משובץ בשעה זו)' : '';
+            selectHTML += `<option value="${soldier.id}" ${disabled}>${soldier.name}${assignedText}</option>`;
         }
     });
     selectHTML += '</select></label>';
@@ -1505,8 +1607,8 @@ function openReplaceSingleShift(date, shiftNumber, positionId, positionName, old
                 </button>
                 <button class="btn-secondary" onclick="closeEditModal()">ביטול</button>
             </div>
-        </div>
-    `;
+                        </div>
+                    `;
 }
 
 function openSwapAllShifts(soldier1Id, soldier1Name) {
@@ -1550,6 +1652,17 @@ async function replaceSoldierInShift(date, shiftNumber, positionId, positionName
         return;
     }
     
+    // בדיקה שהחייל החדש לא כבר משובץ בשעה זו
+    if (isSoldierAssignedInShift(newSoldierId, date, shiftNumber)) {
+        const existingAssignment = getSoldierAssignmentInShift(newSoldierId, date, shiftNumber);
+        const existingPositionName = existingAssignment ? (existingAssignment.positionName || existingAssignment.PositionName || 'עמדה לא ידועה') : 'עמדה לא ידועה';
+        showNotification(`לא ניתן להחליף: ${newSoldier.name} כבר משובץ בשעה זו בעמדה "${existingPositionName}"`, 'error');
+        return;
+    }
+    
+    // שמירת מצב לפני השינוי
+    saveScheduleState();
+    
     try {
         const response = await fetch(`${API_BASE}/schedule/replace`, {
             method: 'POST',
@@ -1569,14 +1682,19 @@ async function replaceSoldierInShift(date, shiftNumber, positionId, positionName
             schedule = await response.json();
             closeEditModal();
             displaySchedule();
+            updateUndoButton();
             showNotification('שיבוץ עודכן בהצלחה', 'success');
         } else {
             const error = await response.text();
             showNotification(`שגיאה: ${error}`, 'error');
+            // אם יש שגיאה, נסיגה מהמצב השמור
+            scheduleHistory.pop();
         }
     } catch (error) {
         console.error('Error replacing soldier:', error);
         showNotification('שגיאה בהחלפת חייל', 'error');
+        // אם יש שגיאה, נסיגה מהמצב השמור
+        scheduleHistory.pop();
     }
 }
 
@@ -1594,6 +1712,9 @@ async function swapSoldiers(soldier1Id, soldier1Name) {
         return;
     }
     
+    // שמירת מצב לפני השינוי
+    saveScheduleState();
+    
     try {
         const response = await fetch(`${API_BASE}/schedule/swap`, {
             method: 'POST',
@@ -1610,14 +1731,19 @@ async function swapSoldiers(soldier1Id, soldier1Name) {
             schedule = await response.json();
             closeEditModal();
             displaySchedule();
+            updateUndoButton();
             showNotification('חיילים הוחלפו בהצלחה בכל המשמרות', 'success');
         } else {
             const error = await response.text();
             showNotification(`שגיאה: ${error}`, 'error');
+            // אם יש שגיאה, נסיגה מהמצב השמור
+            scheduleHistory.pop();
         }
     } catch (error) {
         console.error('Error swapping soldiers:', error);
         showNotification('שגיאה בהחלפת חיילים', 'error');
+        // אם יש שגיאה, נסיגה מהמצב השמור
+        scheduleHistory.pop();
     }
 }
 

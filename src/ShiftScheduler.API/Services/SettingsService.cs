@@ -24,7 +24,7 @@ public class SettingsService : ISettingsService
 
     public async Task<SchedulerSettings> UpdateSettingsAsync(SchedulerSettings settings)
     {
-        if (settings.ShiftHours < 1)
+        if (settings.ShiftHours < 0.5)
             throw new ArgumentException("מספר השעות חייב להיות גדול מ-0", nameof(settings));
 
         await _repository.SaveSettingsAsync(settings);
