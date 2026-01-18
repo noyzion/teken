@@ -315,7 +315,7 @@ public class SchedulerService : ISchedulerService
         return schedule;
     }
 
-    private List<TimeSlot> GenerateTimeSlots(ScheduleConfig config, int shiftHours, int shiftsPerDay)
+    private List<TimeSlot> GenerateTimeSlots(ScheduleConfig config, double shiftHours, int shiftsPerDay)
     {
         var timeSlots = new List<TimeSlot>();
         var startDate = config.StartDate.Date;

@@ -47,7 +47,7 @@
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">מספר שעות לשמירה (גלובלי לכל העמדות)</span>
-                        <input type="number" id="globalShiftHours" min="1" value="8" class="modern-input">
+                        <input type="number" id="globalShiftHours" min="0.5" step="0.5" value="8" class="modern-input">
                     </label>
                 </div>
                 <button class="btn-primary" onclick="saveSettings()">
@@ -215,9 +215,14 @@
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                     <h2 style="margin: 0;">לוח זמנים</h2>
-                    <button class="btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
-                        <span>מצב עריכה</span>
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-secondary" id="undoBtn" onclick="undoLastChange()" style="display: none;">
+                            <span>ביטול שינוי אחרון</span>
+                        </button>
+                        <button class="btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
+                            <span>מצב עריכה</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="scheduleView" class="schedule-view"></div>
             </div>
