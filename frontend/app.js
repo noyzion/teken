@@ -1200,11 +1200,19 @@ async function generateSchedule() {
     statusDiv.innerHTML = '<p>יוצר לוח זמנים עם מרווח מקסימלי בין משמרות...</p>';
     statusDiv.className = '';
 
+    const firstShiftStartHourInput = document.getElementById('firstShiftStartHour')?.value;
+    const firstShiftStartHour = firstShiftStartHourInput === '' || firstShiftStartHourInput === undefined ? null : parseInt(firstShiftStartHourInput);
+    if (firstShiftStartHour !== null && (firstShiftStartHour < 0 || firstShiftStartHour > 23)) {
+        showNotification('שעת התחלה של משמרת ראשונה חייבת להיות בין 0 ל-23', 'error');
+        return;
+    }
+
     const requestData = { 
         startDate, 
         endDate,
         startHour: startHour,
-        endHour: endHour
+        endHour: endHour,
+        firstShiftStartHour: firstShiftStartHour
     };
     
     console.log('=== יצירת לוח זמנים - התחלה ===');

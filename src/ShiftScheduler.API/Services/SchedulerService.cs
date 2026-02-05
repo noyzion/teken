@@ -45,14 +45,10 @@ public class SchedulerService : ISchedulerService
             soldierAssignments[soldier.Id] = new List<SoldierAssignment>();
         }
 
-        // Calculate optimal number of shifts per day for maximum spacing
-        // Number of shifts = number of positions (each position needs a guard)
-        // This ensures maximum spacing between shifts for each soldier
-        var shiftsPerDay = positions.Count;
-
-        // Generate time slots with optimal spacing
-        Console.WriteLine($"מייצר time slots: {shiftsPerDay} משמרות ביום, {settings.ShiftHours} שעות למשמרת");
-        var timeSlots = GenerateTimeSlots(config, settings.ShiftHours, shiftsPerDay);
+        // Generate time slots with continuous coverage (no gaps)
+        // Number of shifts per day = ceil(available hours / shift length) so every hour is covered
+        Console.WriteLine($"מייצר time slots: {settings.ShiftHours} שעות למשמרת, כיסוי רצוף (ללא פערים)");
+        var timeSlots = GenerateTimeSlots(config, settings.ShiftHours);
         Console.WriteLine($"נוצרו {timeSlots.Count} time slots");
 
         // Assign soldiers to positions for each time slot
@@ -315,7 +311,7 @@ public class SchedulerService : ISchedulerService
         return schedule;
     }
 
-    private List<TimeSlot> GenerateTimeSlots(ScheduleConfig config, double shiftHours, int shiftsPerDay)
+    private List<TimeSlot> GenerateTimeSlots(ScheduleConfig config, double shiftHours)
     {
         var timeSlots = new List<TimeSlot>();
         var startDate = config.StartDate.Date;
@@ -326,6 +322,7 @@ public class SchedulerService : ISchedulerService
         var hasEndHour = config.EndHour.HasValue;
         var startHour = config.StartHour ?? 0;
         var endHour = config.EndHour ?? 23;
+        var firstShiftStartHour = config.FirstShiftStartHour ?? 0;
         
         // Calculate total time range
         var totalStartTime = hasStartHour ? startDate.AddHours(startHour) : startDate;
@@ -333,8 +330,9 @@ public class SchedulerService : ISchedulerService
         
         var currentDate = startDate;
         var shiftNumber = 0;
+        var fullDayCoverage = !hasStartHour && !hasEndHour;
 
-        Console.WriteLine($"טווח זמן: {totalStartTime} עד {totalEndTime}");
+        Console.WriteLine($"טווח זמן: {totalStartTime} עד {totalEndTime}, שעת משמרת ראשונה={firstShiftStartHour}");
         
         while (currentDate <= endDate)
         {
@@ -345,71 +343,41 @@ public class SchedulerService : ISchedulerService
             var dayStartHour = (isFirstDay && hasStartHour) ? startHour : 0;
             var dayEndHour = (isLastDay && hasEndHour) ? endHour : 23;
             
-            Console.WriteLine($"יום {currentDate:yyyy-MM-dd}: שעת התחלה={dayStartHour}, שעת סיום={dayEndHour}, יום ראשון={isFirstDay}, יום אחרון={isLastDay}");
-            
-            // Calculate available hours for this day
+            // Available hours in this day (e.g. 0-23 = 24 hours)
             var dayAvailableHours = dayEndHour >= dayStartHour 
                 ? (dayEndHour - dayStartHour + 1) 
                 : (24 - dayStartHour + dayEndHour + 1);
             
-            // Calculate spacing between shifts for maximum rest time
-            // Distribute shifts evenly across available hours
-            var hoursBetweenShifts = dayAvailableHours / (double)shiftsPerDay;
+            // Number of consecutive shifts needed to cover the day (no gaps)
+            var shiftsPerDay = fullDayCoverage 
+                ? (int)Math.Ceiling(24 / shiftHours) 
+                : (int)Math.Ceiling(dayAvailableHours / shiftHours);
+            
+            var baseStartHour = fullDayCoverage ? firstShiftStartHour : dayStartHour;
+            
+            Console.WriteLine($"יום {currentDate:yyyy-MM-dd}: בסיס={baseStartHour}, {shiftsPerDay} משמרות רצופות");
             
             int slotsAddedForDay = 0;
             for (int shiftNum = 0; shiftNum < shiftsPerDay; shiftNum++)
             {
-                // Start each shift with equal spacing, rounded to nearest hour
-                var shiftStartHour = dayStartHour + (int)Math.Round(shiftNum * hoursBetweenShifts);
-                if (shiftStartHour >= 24) shiftStartHour -= 24;
-                
-                var shiftStart = currentDate.AddHours(shiftStartHour);
+                // Consecutive shifts from base: e.g. 6-9, 9-12, 12-15, ... 21-00, 00-3, 3-6 (AddHours handles overflow)
+                var shiftStartOffset = baseStartHour + (shiftNum * shiftHours);
+                var shiftStart = currentDate.AddHours(shiftStartOffset);
                 var shiftEnd = shiftStart.AddHours(shiftHours);
                 
-                // Check if shift start is within the time range
-                if (shiftStart < totalStartTime)
+                // First day only: skip shifts that end before the range start (e.g. before start hour)
+                if (isFirstDay && shiftEnd <= totalStartTime)
                 {
-                    Console.WriteLine($"  משמרת {shiftNum}: דילוג - shiftStart ({shiftStart}) < totalStartTime ({totalStartTime})");
+                    Console.WriteLine($"  משמרת {shiftNum}: דילוג (יום ראשון) - shiftEnd ({shiftEnd}) <= totalStartTime ({totalStartTime})");
                     continue;
                 }
-                
-                // Check if shift exceeds the end time
-                bool shouldSkip = false;
-                if (isLastDay && hasEndHour)
+                // Last day only: skip shifts that start after the range end (e.g. after end hour)
+                if (isLastDay && shiftStart >= totalEndTime)
                 {
-                    // For last day with specific end hour, check if shift start exceeds end hour
-                    if (shiftStart.Date == currentDate && shiftStart.Hour > endHour)
-                    {
-                        Console.WriteLine($"  משמרת {shiftNum}: דילוג - shiftStart.Hour ({shiftStart.Hour}) > endHour ({endHour})");
-                        shouldSkip = true;
-                    }
-                    
-                    // Check if shift end exceeds end hour (on the same day)
-                    if (!shouldSkip && shiftEnd.Date == currentDate && shiftEnd.Hour > endHour)
-                    {
-                        Console.WriteLine($"  משמרת {shiftNum}: דילוג - shiftEnd.Hour ({shiftEnd.Hour}) > endHour ({endHour})");
-                        shouldSkip = true;
-                    }
-                    
-                    // Also check if shift end is on next day and exceeds total end time
-                    if (!shouldSkip && shiftEnd.Date > currentDate && shiftEnd > totalEndTime)
-                    {
-                        Console.WriteLine($"  משמרת {shiftNum}: דילוג - shiftEnd ({shiftEnd}) > totalEndTime ({totalEndTime})");
-                        shouldSkip = true;
-                    }
-                }
-                else
-                {
-                    // For other cases, check if shift end exceeds total end time
-                    if (shiftEnd > totalEndTime)
-                    {
-                        Console.WriteLine($"  משמרת {shiftNum}: דילוג - shiftEnd ({shiftEnd}) > totalEndTime ({totalEndTime})");
-                        shouldSkip = true;
-                    }
-                }
-                
-                if (shouldSkip)
+                    Console.WriteLine($"  משמרת {shiftNum}: דילוג (יום אחרון) - shiftStart ({shiftStart}) >= totalEndTime ({totalEndTime})");
                     continue;
+                }
+                // Middle days: always include all shifts (full 24-hour coverage, no gaps)
 
                 timeSlots.Add(new TimeSlot
                 {

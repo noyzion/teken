@@ -204,9 +204,16 @@
                         </label>
                     </div>
                 </div>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">שעת התחלה של משמרת ראשונה (אופציונלי)</span>
+                        <input type="number" id="firstShiftStartHour" class="modern-input" min="0" max="23" placeholder="ריק = חצות. למשל 6 = 6-9, 9-12, 12-15...">
+                        <small class="input-hint">שעה (0-23). למשל 6 יוצר משמרות: 6-9, 9-12, 12-15, 15-18, 18-21, 21-00, 00-3, 3-6 (כיסוי מלא 24 שעות)</small>
+                    </label>
+                </div>
                 <div class="info-box">
                     <span class="info-icon">ℹ</span>
-                    <span>מספר המשמרות ביום יחושב אוטומטית לפי מספר העמדות, כך שיהיה מרווח מקסימלי בין משמרות לכל חייל. ניתן להגדיר שעות התחלה וסיום ספציפיות.</span>
+                    <span>המשמרות רצופות לאורך כל היום והלילה (ללא פערים). אורך משמרת נקבע בהגדרות. שעת משמרת ראשונה קובעת מאיפה מתחילים (למשל 6 = משמרות מתחילות ב-6:00).</span>
                 </div>
                 <button class="btn-primary btn-large" onclick="generateSchedule()">
                     <span>צור לוח זמנים</span>

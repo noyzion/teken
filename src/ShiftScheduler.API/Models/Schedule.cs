@@ -7,8 +7,9 @@ public class ScheduleConfig
 {
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
-    public int? StartHour { get; set; } // שעת התחלה (0-23), null = 00:00
-    public int? EndHour { get; set; } // שעת סיום (0-23), null = 23:59
+    public int? StartHour { get; set; } // שעת התחלה (0-23), null = 00:00 - מגביל טווח בלבד
+    public int? EndHour { get; set; } // שעת סיום (0-23), null = 23:59 - מגביל טווח בלבד
+    public int? FirstShiftStartHour { get; set; } // שעת התחלה של משמרת ראשונה (0-23), null = 00:00. למשל 6 = משמרות 6-9, 9-12, 12-15...
 }
 
 /// <summary>

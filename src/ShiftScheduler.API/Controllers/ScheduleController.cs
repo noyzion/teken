@@ -37,6 +37,9 @@ public class ScheduleController : ControllerBase
         
         if (config.EndHour.HasValue && (config.EndHour < 0 || config.EndHour > 23))
             return BadRequest("שעת סיום חייבת להיות בין 0 ל-23");
+        
+        if (config.FirstShiftStartHour.HasValue && (config.FirstShiftStartHour < 0 || config.FirstShiftStartHour > 23))
+            return BadRequest("שעת התחלה של משמרת ראשונה חייבת להיות בין 0 ל-23");
 
         try
         {
