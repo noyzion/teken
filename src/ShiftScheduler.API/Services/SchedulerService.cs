@@ -506,6 +506,43 @@ public class SchedulerService : ISchedulerService
                     }
                 }
 
+                // Forbidden hour ranges by day constraint - טווחי שעות אסורות לפי יום
+                if (soldier.Constraints.ForbiddenHourRangesByDay != null)
+                {
+                    // Check ranges that start on current day
+                    if (soldier.Constraints.ForbiddenHourRangesByDay.ContainsKey(dayOfWeekStr))
+                    {
+                        var forbiddenRangesForDay = soldier.Constraints.ForbiddenHourRangesByDay[dayOfWeekStr];
+                        if (forbiddenRangesForDay != null && forbiddenRangesForDay.Any())
+                        {
+                            foreach (var range in forbiddenRangesForDay)
+                            {
+                                // Check if shift overlaps with forbidden range
+                                if (IsTimeRangeOverlapping(shiftStartHour, shiftEndHour, dayOfWeek, dayOfWeek, range))
+                                    return false;
+                            }
+                        }
+                    }
+                    
+                    // Check ranges that end on current day (ranges that started on previous day)
+                    foreach (var kvp in soldier.Constraints.ForbiddenHourRangesByDay)
+                    {
+                        var rangeStartDay = int.Parse(kvp.Key);
+                        var ranges = kvp.Value;
+                        if (ranges == null) continue;
+                        
+                        foreach (var range in ranges)
+                        {
+                            if (range.EndDay.HasValue && range.EndDay.Value == dayOfWeek)
+                            {
+                                // This range ends on current day, check if shift overlaps
+                                if (IsTimeRangeOverlapping(shiftStartHour, shiftEndHour, dayOfWeek, rangeStartDay, range))
+                                    return false;
+                            }
+                        }
+                    }
+                }
+
                 // Forbidden positions constraint
                 if (soldier.Constraints.ForbiddenPositions != null &&
                     soldier.Constraints.ForbiddenPositions.Contains(position.Id))
@@ -713,6 +750,112 @@ public class SchedulerService : ISchedulerService
         public int ShiftNumber { get; set; }
         public DateTime Start { get; set; }
         public DateTime End { get; set; }
+    }
+
+    /// <summary>
+    /// Checks if a shift time range overlaps with a forbidden hour range
+    /// </summary>
+    private bool IsTimeRangeOverlapping(int shiftStartHour, int shiftEndHour, int shiftDayOfWeek, int rangeStartDay, HourRange forbiddenRange)
+    {
+        // If range has end day, it crosses days
+        if (forbiddenRange.EndDay.HasValue)
+        {
+            int rangeEndDay = forbiddenRange.EndDay.Value;
+            
+            // Check if shift is on the start day of the range
+            if (shiftDayOfWeek == rangeStartDay)
+            {
+                // Shift is on range start day
+                // Check if shift overlaps with the start part of the range (from StartHour to midnight)
+                if (shiftEndHour <= shiftStartHour)
+                {
+                    // Shift crosses midnight
+                    // Check if shift start hour is within range (from StartHour to 24)
+                    if (shiftStartHour >= forbiddenRange.StartHour && shiftStartHour < 24)
+                        return true;
+                    // Check if shift end hour (next day) is within range end
+                    if (rangeEndDay == (shiftDayOfWeek + 1) % 7 && shiftEndHour <= forbiddenRange.EndHour)
+                        return true;
+                }
+                else
+                {
+                    // Normal shift on start day
+                    // Check if shift overlaps with range from StartHour to 24
+                    if (shiftStartHour < 24 && shiftEndHour > forbiddenRange.StartHour)
+                        return true;
+                }
+            }
+            
+            // Check if shift is on the end day of the range
+            if (shiftDayOfWeek == rangeEndDay)
+            {
+                // Shift is on range end day
+                // Check if shift overlaps with the end part of the range (from midnight to EndHour)
+                if (shiftEndHour <= shiftStartHour)
+                {
+                    // Shift crosses midnight
+                    // Check if shift end hour (after midnight) is within range (0 to EndHour)
+                    if (shiftEndHour > 0 && shiftEndHour <= forbiddenRange.EndHour)
+                        return true;
+                }
+                else
+                {
+                    // Normal shift on end day
+                    // Check if shift overlaps with range from 0 to EndHour
+                    if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > 0)
+                        return true;
+                }
+            }
+        }
+        else if (forbiddenRange.EndHour < forbiddenRange.StartHour)
+        {
+            // Range crosses midnight within same day (e.g., 20:00-00:00)
+            if (shiftDayOfWeek == rangeStartDay)
+            {
+                if (shiftEndHour <= shiftStartHour)
+                {
+                    // Both shift and range cross midnight
+                    // Check overlap with range from StartHour to 24
+                    if (shiftStartHour >= forbiddenRange.StartHour && shiftStartHour < 24)
+                        return true;
+                    // Check overlap with range from 0 to EndHour
+                    if (shiftEndHour > 0 && shiftEndHour <= forbiddenRange.EndHour)
+                        return true;
+                }
+                else
+                {
+                    // Normal shift, range crosses midnight
+                    // Check if shift overlaps with either part of the range
+                    if (shiftStartHour < 24 && shiftEndHour > forbiddenRange.StartHour)
+                        return true;
+                    if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > 0)
+                        return true;
+                }
+            }
+        }
+        else
+        {
+            // Normal range within same day (e.g., 08:00-17:00)
+            if (shiftDayOfWeek == rangeStartDay)
+            {
+                if (shiftEndHour <= shiftStartHour)
+                {
+                    // Shift crosses midnight, range doesn't
+                    // Check if shift overlaps with range
+                    if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > forbiddenRange.StartHour)
+                        return true;
+                }
+                else
+                {
+                    // Normal shift, normal range
+                    // Check if they overlap
+                    if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > forbiddenRange.StartHour)
+                        return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     private class SoldierAssignment

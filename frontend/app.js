@@ -652,24 +652,100 @@ function updateConstraintsUI() {
     displayConstraints();
 }
 
+let hourRangeCounter = 0; // Counter for unique hour range IDs
+
+function editSoldierConstraints(soldierId) {
+    // Select the soldier in the dropdown
+    const soldierSelect = document.getElementById('constraintSoldier');
+    if (soldierSelect) {
+        soldierSelect.value = soldierId;
+        // Trigger change event to load constraints
+        soldierSelect.dispatchEvent(new Event('change'));
+    }
+    
+    // Scroll to the form
+    const constraintsTab = document.getElementById('constraints');
+    if (constraintsTab) {
+        constraintsTab.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    
+    showNotification('האילוצים נטענו לעריכה', 'success');
+}
+
+// Convert old format (forbiddenHoursByDay: day -> [hours]) to ranges for display in UI
+function convertForbiddenHoursByDayToRanges(forbiddenHoursByDay) {
+    const result = [];
+    if (!forbiddenHoursByDay || typeof forbiddenHoursByDay !== 'object') return result;
+    Object.keys(forbiddenHoursByDay).forEach(dayStr => {
+        const day = parseInt(dayStr);
+        const hours = (forbiddenHoursByDay[dayStr] || []).slice().sort((a, b) => a - b);
+        if (hours.length === 0) return;
+        let start = hours[0];
+        let end = hours[0];
+        for (let i = 1; i < hours.length; i++) {
+            if (hours[i] === end + 1) {
+                end = hours[i];
+            } else {
+                const endHourVal = end + 1;
+                result.push({
+                    startDay: day,
+                    startHour: start,
+                    endHour: endHourVal > 23 ? 0 : endHourVal,
+                    endDay: endHourVal > 23 ? (day + 1) % 7 : null
+                });
+                start = hours[i];
+                end = hours[i];
+            }
+        }
+        const endHourVal = end + 1;
+        result.push({
+            startDay: day,
+            startHour: start,
+            endHour: endHourVal > 23 ? 0 : endHourVal,
+            endDay: endHourVal > 23 ? (day + 1) % 7 : null
+        });
+    });
+    return result;
+}
+
 function loadSoldierConstraints(soldierId) {
     // Reset all
-    document.querySelectorAll('.hour-checkbox-day').forEach(cb => cb.checked = false);
     document.querySelectorAll('.day-checkbox').forEach(cb => cb.checked = false);
     document.querySelectorAll('.forbidden-pos').forEach(cb => cb.checked = false);
     
-    // Reset selected day
-    selectedDayForHours = null;
-    document.querySelectorAll('.day-selector-tab').forEach(tab => tab.classList.remove('active'));
-    updateHoursForSelectedDay();
+    // Clear hour ranges
+    hourRangeCounter = 0;
+    const hourRangesContainer = document.getElementById('hourRangesContainer');
+    if (hourRangesContainer) {
+        hourRangesContainer.innerHTML = '';
+    }
 
     if (!soldierId) {
+        // Update save button text
+        const saveButton = document.querySelector('#constraints button.btn-primary');
+        if (saveButton) {
+            const span = saveButton.querySelector('span');
+            if (span) span.textContent = 'שמור אילוצים';
+        }
         return;
     }
 
     const soldier = soldiers.find(s => s.id === soldierId);
     if (!soldier || !soldier.constraints) {
+        // Update save button text
+        const saveButton = document.querySelector('#constraints button.btn-primary');
+        if (saveButton) {
+            const span = saveButton.querySelector('span');
+            if (span) span.textContent = 'שמור אילוצים';
+        }
         return;
+    }
+    
+    // Update save button text to indicate editing
+    const saveButton = document.querySelector('#constraints button.btn-primary');
+    if (saveButton) {
+        const span = saveButton.querySelector('span');
+        if (span) span.textContent = 'עדכן אילוצים';
     }
 
     // Load forbidden days (full days)
@@ -680,15 +756,20 @@ function loadSoldierConstraints(soldierId) {
         });
     }
 
-    // Load forbidden hours by day
-    if (soldier.constraints.forbiddenHoursByDay) {
-        Object.keys(soldier.constraints.forbiddenHoursByDay).forEach(dayStr => {
+    // Convert old "forbidden hours by day" to ranges and add to UI
+    const convertedRanges = convertForbiddenHoursByDayToRanges(soldier.constraints.forbiddenHoursByDay);
+    convertedRanges.forEach(r => {
+        addHourRangeUI(r.startDay, r.startHour, r.endHour, r.endDay);
+    });
+    
+    // Load forbidden hour ranges
+    if (soldier.constraints.forbiddenHourRangesByDay) {
+        Object.keys(soldier.constraints.forbiddenHourRangesByDay).forEach(dayStr => {
             const day = parseInt(dayStr);
-            const hours = soldier.constraints.forbiddenHoursByDay[dayStr];
-            if (hours && hours.length > 0) {
-                hours.forEach(hour => {
-                    const checkbox = document.querySelector(`.hour-checkbox-day[data-day="${day}"][value="${hour}"]`);
-                    if (checkbox) checkbox.checked = true;
+            const ranges = soldier.constraints.forbiddenHourRangesByDay[dayStr];
+            if (ranges && ranges.length > 0) {
+                ranges.forEach(range => {
+                    addHourRangeUI(day, range.startHour, range.endHour, range.endDay);
                 });
             }
         });
@@ -703,12 +784,103 @@ function loadSoldierConstraints(soldierId) {
     }
 }
 
+function addHourRange() {
+    addHourRangeUI(null, null, null, null);
+}
+
+function addHourRangeUI(startDay, startHour, endHour, endDay) {
+    const container = document.getElementById('hourRangesContainer');
+    if (!container) return;
+    
+    const rangeId = `hourRange_${hourRangeCounter++}`;
+    const rangeDiv = document.createElement('div');
+    rangeDiv.className = 'hour-range-item';
+    rangeDiv.id = rangeId;
+    rangeDiv.style.cssText = 'display: flex; gap: 10px; align-items: center; margin-bottom: 10px; padding: 12px; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; flex-wrap: wrap;';
+    
+    // Start day selector
+    let startDaySelect = '<select class="modern-select hour-range-start-day" style="min-width: 120px;">';
+    startDaySelect += '<option value="">בחר יום התחלה</option>';
+    DAYS_OF_WEEK.forEach((dayName, index) => {
+        startDaySelect += `<option value="${index}" ${startDay === index ? 'selected' : ''}>${dayName}</option>`;
+    });
+    startDaySelect += '</select>';
+    
+    // Start hour selector
+    let startHourSelect = '<select class="modern-select hour-range-start-hour" style="min-width: 80px;">';
+    startHourSelect += '<option value="">שעה</option>';
+    for (let h = 0; h < 24; h++) {
+        startHourSelect += `<option value="${h}" ${startHour === h ? 'selected' : ''}>${h.toString().padStart(2, '0')}:00</option>`;
+    }
+    startHourSelect += '</select>';
+    
+    // End day selector (optional, for ranges that cross days)
+    let endDaySelect = '<select class="modern-select hour-range-end-day" style="min-width: 120px;">';
+    endDaySelect += '<option value="">אותו יום</option>';
+    DAYS_OF_WEEK.forEach((dayName, index) => {
+        endDaySelect += `<option value="${index}" ${endDay === index ? 'selected' : ''}>${dayName}</option>`;
+    });
+    endDaySelect += '</select>';
+    
+    // End hour selector
+    let endHourSelect = '<select class="modern-select hour-range-end-hour" style="min-width: 80px;">';
+    endHourSelect += '<option value="">שעה</option>';
+    for (let h = 0; h < 24; h++) {
+        endHourSelect += `<option value="${h}" ${endHour === h ? 'selected' : ''}>${h.toString().padStart(2, '0')}:00</option>`;
+    }
+    endHourSelect += '</select>';
+    
+    // Calculate range number based on existing ranges
+    const existingRanges = container.querySelectorAll('.hour-range-item').length;
+    const rangeNumber = existingRanges + 1;
+    
+    rangeDiv.innerHTML = `
+        <div style="width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span style="font-weight: 600; color: #6366f1; min-width: 80px;">טווח ${rangeNumber}:</span>
+            <span style="font-weight: 500;">מ:</span>
+            ${startDaySelect}
+            ${startHourSelect}
+            <span style="font-weight: 500;">עד:</span>
+            ${endDaySelect}
+            ${endHourSelect}
+            <button type="button" class="btn-delete" onclick="removeHourRange('${rangeId}')" style="margin-right: auto;">
+                <span>🗑️ מחק</span>
+            </button>
+        </div>
+    `;
+    
+    container.appendChild(rangeDiv);
+}
+
+function removeHourRange(rangeId) {
+    const rangeDiv = document.getElementById(rangeId);
+    if (rangeDiv) {
+        rangeDiv.remove();
+        // Update range numbers after removal
+        updateRangeNumbers();
+    }
+}
+
+function updateRangeNumbers() {
+    const container = document.getElementById('hourRangesContainer');
+    if (!container) return;
+    
+    const ranges = container.querySelectorAll('.hour-range-item');
+    ranges.forEach((range, index) => {
+        const numberSpan = range.querySelector('span[style*="color: #6366f1"]');
+        if (numberSpan) {
+            numberSpan.textContent = `טווח ${index + 1}:`;
+        }
+    });
+}
+
 function displayConstraints() {
     const list = document.getElementById('constraintsList');
     const soldiersWithConstraints = soldiers.filter(s => 
         s.constraints && Object.keys(s.constraints).length > 0 &&
         ((s.constraints.forbiddenDaysOfWeek && s.constraints.forbiddenDaysOfWeek.length > 0) || 
          (s.constraints.forbiddenHoursByDay && Object.keys(s.constraints.forbiddenHoursByDay).length > 0) ||
+         (s.constraints.forbiddenHourRangesByDay && Object.keys(s.constraints.forbiddenHourRangesByDay).length > 0) ||
          (s.constraints.forbiddenPositions && s.constraints.forbiddenPositions.length > 0))
     );
 
@@ -723,17 +895,22 @@ function displayConstraints() {
     }
 
     list.innerHTML = soldiersWithConstraints.map(soldier => {
-        const constraints = [];
+        const constraintItems = [];
         
         // Forbidden days (full days)
         if (soldier.constraints.forbiddenDaysOfWeek && soldier.constraints.forbiddenDaysOfWeek.length > 0) {
             const dayNames = soldier.constraints.forbiddenDaysOfWeek
                 .map(day => DAYS_OF_WEEK[day])
                 .filter(Boolean);
-            constraints.push(`ימים שלמים אסורים: ${dayNames.join(', ')}`);
+            constraintItems.push({
+                type: 'forbiddenDaysOfWeek',
+                label: 'ימים שלמים אסורים',
+                value: dayNames.join(', '),
+                data: soldier.constraints.forbiddenDaysOfWeek
+            });
         }
         
-        // Forbidden hours by day
+        // Legacy: forbidden hours by day (old format - can be deleted or edited to convert to ranges)
         if (soldier.constraints.forbiddenHoursByDay) {
             const hoursByDay = [];
             Object.keys(soldier.constraints.forbiddenHoursByDay).forEach(dayStr => {
@@ -745,7 +922,41 @@ function displayConstraints() {
                 }
             });
             if (hoursByDay.length > 0) {
-                constraints.push(`שעות אסורות לפי יום: ${hoursByDay.join('; ')}`);
+                constraintItems.push({
+                    type: 'forbiddenHoursByDay',
+                    label: 'שעות אסורות לפי יום (ישן)',
+                    value: hoursByDay.join('; '),
+                    data: soldier.constraints.forbiddenHoursByDay
+                });
+            }
+        }
+        
+        // Forbidden hour ranges by day
+        if (soldier.constraints.forbiddenHourRangesByDay) {
+            const allRanges = [];
+            Object.keys(soldier.constraints.forbiddenHourRangesByDay).forEach(dayStr => {
+                const day = parseInt(dayStr);
+                const ranges = soldier.constraints.forbiddenHourRangesByDay[dayStr];
+                if (ranges && ranges.length > 0) {
+                    ranges.forEach(range => {
+                        const startHour = range.startHour.toString().padStart(2, '0') + ':00';
+                        const endHour = range.endHour.toString().padStart(2, '0') + ':00';
+                        if (range.endDay !== null && range.endDay !== undefined) {
+                            const endDayName = DAYS_OF_WEEK[range.endDay];
+                            allRanges.push(`${DAYS_OF_WEEK[day]} ${startHour}-${endDayName} ${endHour}`);
+                        } else {
+                            allRanges.push(`${DAYS_OF_WEEK[day]} ${startHour}-${endHour}`);
+                        }
+                    });
+                }
+            });
+            if (allRanges.length > 0) {
+                constraintItems.push({
+                    type: 'forbiddenHourRangesByDay',
+                    label: `טווחי שעות אסורות (${allRanges.length})`,
+                    value: allRanges.join(', '),
+                    data: soldier.constraints.forbiddenHourRangesByDay
+                });
             }
         }
         
@@ -754,16 +965,55 @@ function displayConstraints() {
             const forbiddenNames = soldier.constraints.forbiddenPositions
                 .map(id => positions.find(p => p.id === id)?.name)
                 .filter(Boolean);
-            constraints.push(`עמדות אסורות: ${forbiddenNames.join(', ')}`);
+            constraintItems.push({
+                type: 'forbiddenPositions',
+                label: 'עמדות אסורות',
+                value: forbiddenNames.join(', '),
+                data: soldier.constraints.forbiddenPositions
+            });
         }
 
+        const constraintsHTML = constraintItems.map((item, index) => {
+            const escapedSoldierId = soldier.id.replace(/'/g, "\\'");
+            const escapedItemType = item.type.replace(/'/g, "\\'");
+            const escapedLabel = item.label.replace(/'/g, "\\'");
+            return `
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 6px; background: #f9fafb; border-radius: 6px;">
+                <span style="flex: 1; font-size: 0.9em;">${item.label}: <strong>${item.value}</strong></span>
+                <button class="btn-secondary" onclick="editSoldierConstraints('${escapedSoldierId}')" 
+                        style="padding: 4px 8px; font-size: 0.85em;" 
+                        title="ערוך ${escapedLabel}">
+                    <span>✏️</span>
+                </button>
+                <button class="btn-delete" onclick="removeConstraint('${escapedSoldierId}', '${escapedItemType}')" 
+                        style="padding: 4px 8px; font-size: 0.85em;" 
+                        title="מחק ${escapedLabel}">
+                    <span>🗑️</span>
+                </button>
+            </div>
+        `;
+        }).join('');
+
+        const escapedSoldierId = soldier.id.replace(/'/g, "\\'");
+        const escapedSoldierName = soldier.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        
         return `
             <div class="list-item">
-                <div class="info">
+                <div class="info" style="flex: 1;">
                     <strong>${soldier.name}</strong>
                     <div style="margin-top: 8px; color: #6b7280; font-size: 0.9em;">
-                        ${constraints.join(' • ')}
+                        ${constraintsHTML}
                     </div>
+                </div>
+                <div class="actions" style="display: flex; gap: 8px; flex-direction: column;">
+                    <button class="btn-primary" onclick="editSoldierConstraints('${escapedSoldierId}')" 
+                            title="ערוך את האילוצים של חייל זה" style="white-space: nowrap;">
+                        <span>✏️ ערוך</span>
+                    </button>
+                    <button class="btn-delete" onclick="clearSoldierConstraints('${escapedSoldierId}', '${escapedSoldierName}')" 
+                            title="מחק את כל האילוצים של חייל זה" style="white-space: nowrap;">
+                        <span>🗑️ מחק הכל</span>
+                    </button>
                 </div>
             </div>
         `;
@@ -779,29 +1029,67 @@ async function saveConstraints() {
 
     const soldier = soldiers.find(s => s.id === soldierId);
     if (!soldier) return;
+    
+    // Check if this is an update or new constraints
+    const isUpdate = soldier.constraints && (
+        (soldier.constraints.forbiddenDaysOfWeek && soldier.constraints.forbiddenDaysOfWeek.length > 0) ||
+        (soldier.constraints.forbiddenHoursByDay && Object.keys(soldier.constraints.forbiddenHoursByDay || {}).length > 0) ||
+        (soldier.constraints.forbiddenHourRangesByDay && Object.keys(soldier.constraints.forbiddenHourRangesByDay || {}).length > 0) ||
+        (soldier.constraints.forbiddenPositions && soldier.constraints.forbiddenPositions.length > 0)
+    );
 
     // Get forbidden days (full days) from checkboxes
     const forbiddenDays = Array.from(document.querySelectorAll('.day-checkbox:checked'))
         .map(cb => parseInt(cb.value))
         .filter(d => !isNaN(d) && d >= 0 && d <= 6);
 
-    // Get forbidden hours by day from checkboxes
-    const forbiddenHoursByDay = {};
-    document.querySelectorAll('.hour-checkbox-day:checked').forEach(cb => {
-        const day = cb.dataset.day;
-        const hour = parseInt(cb.value);
-        if (!isNaN(hour) && hour >= 0 && hour <= 23 && day !== undefined) {
-            if (!forbiddenHoursByDay[day]) {
-                forbiddenHoursByDay[day] = [];
-            }
-            forbiddenHoursByDay[day].push(hour);
+    // Get forbidden hour ranges (all hour constraints are now defined as ranges)
+    const forbiddenHourRangesByDay = {};
+    document.querySelectorAll('.hour-range-item').forEach(rangeItem => {
+        const startDaySelect = rangeItem.querySelector('.hour-range-start-day');
+        const startHourSelect = rangeItem.querySelector('.hour-range-start-hour');
+        const endDaySelect = rangeItem.querySelector('.hour-range-end-day');
+        const endHourSelect = rangeItem.querySelector('.hour-range-end-hour');
+        
+        if (!startDaySelect || !startHourSelect || !endHourSelect) return;
+        
+        const startDay = startDaySelect.value;
+        const startHour = startHourSelect.value;
+        const endDay = endDaySelect.value;
+        const endHour = endHourSelect.value;
+        
+        if (!startDay || startHour === '' || endHour === '') {
+            return; // Skip incomplete ranges
         }
+        
+        const startDayNum = parseInt(startDay);
+        const startHourNum = parseInt(startHour);
+        const endHourNum = parseInt(endHour);
+        const endDayNum = endDay && endDay !== '' ? parseInt(endDay) : null;
+        
+        if (isNaN(startDayNum) || isNaN(startHourNum) || isNaN(endHourNum)) {
+            return; // Skip invalid ranges
+        }
+        
+        // Determine which day to store the range under
+        // If range crosses days, store it under the start day
+        const storageDay = startDayNum.toString();
+        
+        if (!forbiddenHourRangesByDay[storageDay]) {
+            forbiddenHourRangesByDay[storageDay] = [];
+        }
+        
+        forbiddenHourRangesByDay[storageDay].push({
+            startHour: startHourNum,
+            endHour: endHourNum,
+            endDay: endDayNum
+        });
     });
     
     // Remove empty arrays
-    Object.keys(forbiddenHoursByDay).forEach(day => {
-        if (forbiddenHoursByDay[day].length === 0) {
-            delete forbiddenHoursByDay[day];
+    Object.keys(forbiddenHourRangesByDay).forEach(day => {
+        if (forbiddenHourRangesByDay[day].length === 0) {
+            delete forbiddenHourRangesByDay[day];
         }
     });
 
@@ -811,7 +1099,8 @@ async function saveConstraints() {
 
     soldier.constraints = {
         forbiddenDaysOfWeek: forbiddenDays.length > 0 ? forbiddenDays : null,
-        forbiddenHoursByDay: Object.keys(forbiddenHoursByDay).length > 0 ? forbiddenHoursByDay : null,
+        forbiddenHoursByDay: null,
+        forbiddenHourRangesByDay: Object.keys(forbiddenHourRangesByDay).length > 0 ? forbiddenHourRangesByDay : null,
         forbiddenPositions: forbiddenPositions.length > 0 ? forbiddenPositions : null
     };
 
@@ -829,14 +1118,33 @@ async function saveConstraints() {
                 soldiers[index] = updated;
             }
             
+            // Update save button text back to default
+            const saveButton = document.querySelector('#constraints button.btn-primary');
+            if (saveButton) {
+                const span = saveButton.querySelector('span');
+                if (span) span.textContent = 'שמור אילוצים';
+            }
+            
             // Reset form
             document.getElementById('constraintSoldier').value = '';
-            document.querySelectorAll('.hour-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.hour-checkbox-day').forEach(cb => cb.checked = false);
             document.querySelectorAll('.day-checkbox').forEach(cb => cb.checked = false);
             document.querySelectorAll('.forbidden-pos').forEach(cb => cb.checked = false);
             
+            // Clear hour ranges
+            const hourRangesContainer = document.getElementById('hourRangesContainer');
+            if (hourRangesContainer) {
+                hourRangesContainer.innerHTML = '';
+                hourRangeCounter = 0;
+            }
+            
+            // Reset selected day
+            selectedDayForHours = null;
+            document.querySelectorAll('.day-selector-tab').forEach(tab => tab.classList.remove('active'));
+            updateHoursForSelectedDay();
+            
             displayConstraints();
-            showNotification('אילוצים נשמרו בהצלחה', 'success');
+            showNotification(isUpdate ? 'אילוצים עודכנו בהצלחה' : 'אילוצים נשמרו בהצלחה', 'success');
         } else {
             const error = await response.text();
             showNotification(`שגיאה: ${error}`, 'error');
@@ -1270,8 +1578,28 @@ function displaySchedule() {
     console.log('מציג טבלה...');
     console.log('אורך statsHTML:', statsHTML.length);
     console.log('אורך tableHTML:', tableHTML.length);
-    // מציגים קודם את הטבלה ואז את הסטטיסטיקות
-    view.innerHTML = tableHTML + statsHTML;
+    
+    // Add export button section
+    const exportHTML = `
+        <div class="export-section" style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 15px 0; color: #1f2937;">ייצוא לוח זמנים</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="exportToCSV()" style="display: flex; align-items: center; gap: 8px;">
+                    <span>📥 ייצא ל-CSV</span>
+                </button>
+                <button class="btn-primary" onclick="exportToGoogleSheets()" style="display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #34a853 0%, #2d8f47 100%);">
+                    <span>📊 ייצא ל-Google Sheets</span>
+                </button>
+            </div>
+            <p style="margin-top: 10px; font-size: 0.85em; color: #6b7280;">
+                ייצוא CSV: מוריד קובץ שניתן לייבא ל-Google Sheets או Excel<br>
+                ייצוא ל-Google Sheets: יוצר גיליון חדש ב-Google Sheets עם הנתונים
+            </p>
+        </div>
+    `;
+    
+    // מציגים קודם את הטבלה, אז את הסטטיסטיקות, ואז את כפתורי הייצוא
+    view.innerHTML = tableHTML + statsHTML + exportHTML;
     console.log('טבלה הוצגה בהצלחה');
     console.log('=== displaySchedule - סיום ===');
 }
@@ -2006,5 +2334,536 @@ async function deleteSavedSchedule(id) {
     } catch (error) {
         console.error('Error deleting schedule:', error);
         showNotification('שגיאה במחיקת לוח זמנים', 'error');
+    }
+}
+
+// Remove a specific constraint type for a soldier
+async function removeConstraint(soldierId, constraintType) {
+    const soldier = soldiers.find(s => s.id === soldierId);
+    if (!soldier) {
+        showNotification('חייל לא נמצא', 'error');
+        return;
+    }
+    
+    const constraintNames = {
+        'forbiddenDaysOfWeek': 'ימים שלמים אסורים',
+        'forbiddenHoursByDay': 'שעות אסורות לפי יום',
+        'forbiddenHourRangesByDay': 'טווחי שעות אסורות',
+        'forbiddenPositions': 'עמדות אסורות'
+    };
+    
+    const constraintName = constraintNames[constraintType] || 'אילוץ';
+    
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את ${constraintName} של ${soldier.name}?`)) {
+        return;
+    }
+    
+    // Clear the specific constraint
+    if (!soldier.constraints) {
+        soldier.constraints = {};
+    }
+    
+    soldier.constraints[constraintType] = null;
+    
+    try {
+        const response = await fetch(`${API_BASE}/soldiers/${soldierId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(soldier)
+        });
+        
+        if (response.ok) {
+            const updated = await response.json();
+            const index = soldiers.findIndex(s => s.id === soldierId);
+            if (index !== -1) {
+                soldiers[index] = updated;
+            }
+            
+            displayConstraints();
+            showNotification(`${constraintName} של ${soldier.name} נמחק בהצלחה`, 'success');
+        } else {
+            const error = await response.text();
+            showNotification(`שגיאה: ${error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error removing constraint:', error);
+        showNotification('שגיאה במחיקת האילוץ', 'error');
+    }
+}
+
+// Clear all constraints for all soldiers
+async function clearAllConstraints() {
+    const soldiersWithConstraints = soldiers.filter(s => 
+        s.constraints && Object.keys(s.constraints).length > 0 &&
+        ((s.constraints.forbiddenDaysOfWeek && s.constraints.forbiddenDaysOfWeek.length > 0) || 
+         (s.constraints.forbiddenHoursByDay && Object.keys(s.constraints.forbiddenHoursByDay || {}).length > 0) ||
+         (s.constraints.forbiddenHourRangesByDay && Object.keys(s.constraints.forbiddenHourRangesByDay || {}).length > 0) ||
+         (s.constraints.forbiddenPositions && s.constraints.forbiddenPositions.length > 0))
+    );
+    
+    if (soldiersWithConstraints.length === 0) {
+        showNotification('אין אילוצים למחיקה', 'warning');
+        return;
+    }
+    
+    const soldiersNames = soldiersWithConstraints.map(s => s.name).join(', ');
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את כל האילוצים של כל החיילים?\n\nזה ימחק את כל האילוצים של ${soldiersWithConstraints.length} חיילים:\n${soldiersNames}\n\nפעולה זו לא ניתנת לביטול!`)) {
+        return;
+    }
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const soldier of soldiersWithConstraints) {
+        // Clear all constraints
+        soldier.constraints = {
+            forbiddenDaysOfWeek: null,
+            forbiddenHoursByDay: null,
+            forbiddenHourRangesByDay: null,
+            forbiddenPositions: null
+        };
+        
+        try {
+            const response = await fetch(`${API_BASE}/soldiers/${soldier.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(soldier)
+            });
+            
+            if (response.ok) {
+                const updated = await response.json();
+                const index = soldiers.findIndex(s => s.id === soldier.id);
+                if (index !== -1) {
+                    soldiers[index] = updated;
+                }
+                successCount++;
+            } else {
+                failCount++;
+            }
+        } catch (error) {
+            console.error(`Error clearing constraints for ${soldier.name}:`, error);
+            failCount++;
+        }
+    }
+    
+    // Clear the form
+    document.getElementById('constraintSoldier').value = '';
+    document.querySelectorAll('.hour-checkbox-day').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.day-checkbox').forEach(cb => cb.checked = false);
+    document.querySelectorAll('.forbidden-pos').forEach(cb => cb.checked = false);
+    
+    // Clear hour ranges
+    const hourRangesContainer = document.getElementById('hourRangesContainer');
+    if (hourRangesContainer) {
+        hourRangesContainer.innerHTML = '';
+        hourRangeCounter = 0;
+    }
+    
+    // Reset selected day
+    selectedDayForHours = null;
+    document.querySelectorAll('.day-selector-tab').forEach(tab => tab.classList.remove('active'));
+    updateHoursForSelectedDay();
+    
+    // Update save button text
+    const saveButton = document.querySelector('#constraints button.btn-primary');
+    if (saveButton) {
+        const span = saveButton.querySelector('span');
+        if (span) span.textContent = 'שמור אילוצים';
+    }
+    
+    displayConstraints();
+    
+    if (failCount === 0) {
+        showNotification(`כל האילוצים של ${successCount} חיילים נמחקו בהצלחה!`, 'success');
+    } else {
+        showNotification(`נמחקו אילוצים של ${successCount} חיילים, ${failCount} נכשלו`, 'warning');
+    }
+}
+
+// Clear all constraints for a soldier
+async function clearSoldierConstraints(soldierId, soldierName) {
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את כל האילוצים של ${soldierName}?`)) {
+        return;
+    }
+    
+    const soldier = soldiers.find(s => s.id === soldierId);
+    if (!soldier) {
+        showNotification('חייל לא נמצא', 'error');
+        return;
+    }
+    
+    // Clear all constraints
+    soldier.constraints = {
+        forbiddenDaysOfWeek: null,
+        forbiddenHoursByDay: null,
+        forbiddenHourRangesByDay: null,
+        forbiddenPositions: null
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/soldiers/${soldierId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(soldier)
+        });
+        
+        if (response.ok) {
+            const updated = await response.json();
+            const index = soldiers.findIndex(s => s.id === soldierId);
+            if (index !== -1) {
+                soldiers[index] = updated;
+            }
+            
+            // Clear the form
+            document.getElementById('constraintSoldier').value = '';
+            document.querySelectorAll('.hour-checkbox-day').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.day-checkbox').forEach(cb => cb.checked = false);
+            document.querySelectorAll('.forbidden-pos').forEach(cb => cb.checked = false);
+            
+            // Clear hour ranges
+            const hourRangesContainer = document.getElementById('hourRangesContainer');
+            if (hourRangesContainer) {
+                hourRangesContainer.innerHTML = '';
+                hourRangeCounter = 0;
+            }
+            
+            // Reset selected day
+            selectedDayForHours = null;
+            document.querySelectorAll('.day-selector-tab').forEach(tab => tab.classList.remove('active'));
+            updateHoursForSelectedDay();
+            
+            displayConstraints();
+            showNotification(`כל האילוצים של ${soldierName} נמחקו בהצלחה`, 'success');
+        } else {
+            const error = await response.text();
+            showNotification(`שגיאה: ${error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error clearing constraints:', error);
+        showNotification('שגיאה במחיקת האילוצים', 'error');
+    }
+}
+
+// Export Functions
+function exportToCSV() {
+    if (schedule.length === 0) {
+        showNotification('אין לוח זמנים לייצוא', 'error');
+        return;
+    }
+    
+    try {
+        // Get all unique dates and positions
+        const datesSet = new Set();
+        const positionsMap = new Map();
+        
+        schedule.forEach(item => {
+            if (!item) return;
+            const date = item.date || item.Date;
+            if (date) {
+                datesSet.add(date);
+            }
+            
+            const assignments = item.assignments || item.Assignments || [];
+            assignments.forEach(a => {
+                if (!a) return;
+                const positionId = a.positionId || a.PositionId;
+                const positionName = a.positionName || a.PositionName;
+                if (positionId && !positionsMap.has(positionId)) {
+                    positionsMap.set(positionId, positionName || '');
+                }
+            });
+        });
+        
+        const allDates = Array.from(datesSet).sort();
+        const allPositions = Array.from(positionsMap.entries());
+        
+        // Group schedule by date and shift
+        const scheduleByDateAndShift = {};
+        schedule.forEach(item => {
+            if (!item) return;
+            const date = item.date || item.Date;
+            const shiftNumber = item.shiftNumber !== undefined ? item.shiftNumber : item.ShiftNumber;
+            if (!date || shiftNumber === undefined) return;
+            
+            if (!scheduleByDateAndShift[date]) {
+                scheduleByDateAndShift[date] = {};
+            }
+            if (!scheduleByDateAndShift[date][shiftNumber]) {
+                scheduleByDateAndShift[date][shiftNumber] = item;
+            }
+        });
+        
+        // Build CSV content
+        let csvContent = '\uFEFF'; // BOM for UTF-8 with Hebrew support
+        
+        // Header row
+        csvContent += 'יום,תאריך,שעה,';
+        allPositions.forEach(([posId, posName]) => {
+            csvContent += `${posName},`;
+        });
+        csvContent += '\n';
+        
+        // Data rows
+        allDates.forEach(date => {
+            const dateObj = new Date(date);
+            const dayName = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
+            const dateStr = dateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            const shifts = Object.keys(scheduleByDateAndShift[date] || {})
+                .map(n => parseInt(n))
+                .sort((a, b) => a - b);
+            
+            shifts.forEach((shiftNum, index) => {
+                const shift = scheduleByDateAndShift[date][shiftNum];
+                if (!shift) return;
+                
+                const start = shift.start || shift.Start;
+                const end = shift.end || shift.End;
+                const assignments = shift.assignments || shift.Assignments || [];
+                
+                if (!start || !end) return;
+                
+                const startTime = new Date(start).toLocaleTimeString('he-IL', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                const endTime = new Date(end).toLocaleTimeString('he-IL', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                // Day and date (only for first shift of the day)
+                if (index === 0) {
+                    csvContent += `${dayName},${dateStr},`;
+                } else {
+                    csvContent += `,,`;
+                }
+                
+                // Time
+                csvContent += `${startTime}-${endTime},`;
+                
+                // Position columns
+                allPositions.forEach(([posId, posName]) => {
+                    const assignment = assignments.find(a => {
+                        const aPosId = a.positionId || a.PositionId;
+                        return aPosId === posId;
+                    });
+                    if (assignment) {
+                        const soldierName = assignment.soldierName || assignment.SoldierName || '';
+                        csvContent += `${soldierName},`;
+                    } else {
+                        csvContent += `-,`;
+                    }
+                });
+                
+                csvContent += '\n';
+            });
+        });
+        
+        // Add statistics section
+        csvContent += '\nסטטיסטיקות חיילים\n';
+        csvContent += 'שם חייל,סה"כ משמרות,שמירות,רווח ממוצע (שעות),רווח מקסימלי (שעות)\n';
+        
+        const allSoldiers = Array.from(new Set(
+            schedule.flatMap(item => {
+                const assignments = item.assignments || item.Assignments || [];
+                return assignments.map(a => {
+                    const soldierId = a.soldierId || a.SoldierId;
+                    const soldierName = a.soldierName || a.SoldierName;
+                    return { id: soldierId, name: soldierName };
+                }).filter(s => s.id && s.name);
+            })
+        )).filter((s, index, self) => 
+            index === self.findIndex(t => t.id === s.id)
+        );
+        
+        const soldierStats = calculateSoldierStats(schedule, allSoldiers);
+        allSoldiers.forEach(soldier => {
+            const stats = soldierStats[soldier.id] || { totalShifts: 0, guardShifts: 0, avgGap: 0, maxGap: 0 };
+            csvContent += `${soldier.name},${stats.totalShifts},${stats.guardShifts || 0},${stats.avgGap.toFixed(1)},${stats.maxGap}\n`;
+        });
+        
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        // Generate filename with current date
+        const now = new Date();
+        const filename = `לוח_זמנים_${now.toISOString().split('T')[0]}.csv`;
+        link.setAttribute('download', filename);
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification('הקובץ CSV הורד בהצלחה! ניתן לייבא אותו ל-Google Sheets', 'success');
+    } catch (error) {
+        console.error('Error exporting to CSV:', error);
+        showNotification('שגיאה בייצוא CSV', 'error');
+    }
+}
+
+async function exportToGoogleSheets() {
+    if (schedule.length === 0) {
+        showNotification('אין לוח זמנים לייצוא', 'error');
+        return;
+    }
+    
+    try {
+        // First, export to CSV format
+        const datesSet = new Set();
+        const positionsMap = new Map();
+        
+        schedule.forEach(item => {
+            if (!item) return;
+            const date = item.date || item.Date;
+            if (date) {
+                datesSet.add(date);
+            }
+            
+            const assignments = item.assignments || item.Assignments || [];
+            assignments.forEach(a => {
+                if (!a) return;
+                const positionId = a.positionId || a.PositionId;
+                const positionName = a.positionName || a.PositionName;
+                if (positionId && !positionsMap.has(positionId)) {
+                    positionsMap.set(positionId, positionName || '');
+                }
+            });
+        });
+        
+        const allDates = Array.from(datesSet).sort();
+        const allPositions = Array.from(positionsMap.entries());
+        
+        // Group schedule by date and shift
+        const scheduleByDateAndShift = {};
+        schedule.forEach(item => {
+            if (!item) return;
+            const date = item.date || item.Date;
+            const shiftNumber = item.shiftNumber !== undefined ? item.shiftNumber : item.ShiftNumber;
+            if (!date || shiftNumber === undefined) return;
+            
+            if (!scheduleByDateAndShift[date]) {
+                scheduleByDateAndShift[date] = {};
+            }
+            if (!scheduleByDateAndShift[date][shiftNumber]) {
+                scheduleByDateAndShift[date][shiftNumber] = item;
+            }
+        });
+        
+        // Build data array for Google Sheets
+        const data = [];
+        
+        // Header row
+        const headerRow = ['יום', 'תאריך', 'שעה'];
+        allPositions.forEach(([posId, posName]) => {
+            headerRow.push(posName);
+        });
+        data.push(headerRow);
+        
+        // Data rows
+        allDates.forEach(date => {
+            const dateObj = new Date(date);
+            const dayName = dateObj.toLocaleDateString('he-IL', { weekday: 'long' });
+            const dateStr = dateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            const shifts = Object.keys(scheduleByDateAndShift[date] || {})
+                .map(n => parseInt(n))
+                .sort((a, b) => a - b);
+            
+            shifts.forEach((shiftNum, index) => {
+                const shift = scheduleByDateAndShift[date][shiftNum];
+                if (!shift) return;
+                
+                const start = shift.start || shift.Start;
+                const end = shift.end || shift.End;
+                const assignments = shift.assignments || shift.Assignments || [];
+                
+                if (!start || !end) return;
+                
+                const startTime = new Date(start).toLocaleTimeString('he-IL', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                const endTime = new Date(end).toLocaleTimeString('he-IL', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                const row = [];
+                // Day and date (only for first shift of the day)
+                if (index === 0) {
+                    row.push(dayName, dateStr);
+                } else {
+                    row.push('', '');
+                }
+                
+                // Time
+                row.push(`${startTime}-${endTime}`);
+                
+                // Position columns
+                allPositions.forEach(([posId, posName]) => {
+                    const assignment = assignments.find(a => {
+                        const aPosId = a.positionId || a.PositionId;
+                        return aPosId === posId;
+                    });
+                    if (assignment) {
+                        const soldierName = assignment.soldierName || assignment.SoldierName || '';
+                        row.push(soldierName);
+                    } else {
+                        row.push('-');
+                    }
+                });
+                
+                data.push(row);
+            });
+        });
+        
+        // Convert to CSV format for Google Sheets import
+        let csvContent = '\uFEFF'; // BOM for UTF-8
+        data.forEach(row => {
+            csvContent += row.map(cell => {
+                // Escape quotes and wrap in quotes if contains comma, quote, or newline
+                if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
+                    return `"${cell.replace(/"/g, '""')}"`;
+                }
+                return cell;
+            }).join(',') + '\n';
+        });
+        
+        // Create a data URI and open Google Sheets with the data
+        // Using Google Sheets URL with data parameter
+        const encodedData = encodeURIComponent(csvContent);
+        
+        // Alternative: Create a temporary CSV file and provide instructions
+        // For now, we'll use the CSV export and provide instructions for Google Sheets
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        
+        const now = new Date();
+        const filename = `לוח_זמנים_${now.toISOString().split('T')[0]}.csv`;
+        link.setAttribute('download', filename);
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // Show instructions for importing to Google Sheets
+        showNotification('הקובץ CSV הורד! פתח Google Sheets, לחץ על "קובץ" > "ייבוא" > "העלה" ובחר את הקובץ', 'success');
+        
+        // Open Google Sheets in a new tab
+        setTimeout(() => {
+            window.open('https://sheets.google.com', '_blank');
+        }, 1000);
+        
+    } catch (error) {
+        console.error('Error exporting to Google Sheets:', error);
+        showNotification('שגיאה בייצוא ל-Google Sheets', 'error');
     }
 }

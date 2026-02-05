@@ -144,12 +144,12 @@
                 </div>
                 <div class="form-group">
                     <label class="input-label">
-                        <span class="label-text">שעות אסורות לפי יום (בחר יום ואז סמן את השעות האסורות באותו יום)</span>
-                        <div class="day-hours-selector">
-                            <div class="day-selector-tabs" id="daySelectorTabs"></div>
-                            <div id="hoursForDayGroup" class="hours-group"></div>
-                        </div>
-                        <small class="input-hint">בחר יום מהרשימה למעלה ואז סמן את השעות האסורות באותו יום</small>
+                        <span class="label-text">טווחי שעות אסורות (ניתן להוסיף כמה טווחים)</span>
+                        <div id="hourRangesContainer" class="hour-ranges-container" style="min-height: 50px; margin-bottom: 10px;"></div>
+                        <button type="button" class="btn-secondary" onclick="addHourRange()" style="margin-top: 10px;">
+                            <span>➕ הוסף טווח שעות נוסף</span>
+                        </button>
+                        <small class="input-hint">הגדר שעות אסורות לפי טווחים. למשל: יום רביעי 20:00-00:00, יום חמישי 00:00-17:00. ניתן להוסיף כמה טווחים.</small>
                     </label>
                 </div>
                 <div class="form-group">
@@ -158,9 +158,14 @@
                         <div id="forbiddenPositions" class="checkbox-group"></div>
                     </label>
                 </div>
-                <button class="btn-primary" onclick="saveConstraints()">
-                    <span>שמור אילוצים</span>
-                </button>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn-primary" onclick="saveConstraints()">
+                        <span>שמור אילוצים</span>
+                    </button>
+                    <button class="btn-delete" onclick="clearAllConstraints()" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);">
+                        <span>🗑️ מחק את כל האילוצים של כל החיילים</span>
+                    </button>
+                </div>
                 <div id="constraintsList" class="list"></div>
             </div>
         </div>
