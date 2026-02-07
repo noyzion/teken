@@ -4,22 +4,18 @@ using ShiftScheduler.API.Models;
 namespace ShiftScheduler.API.Repositories;
 
 /// <summary>
-/// Soldier repository implementation
-/// Single Responsibility: Manages Soldier entities
+/// Soldier repository - user-scoped (Data/{userId}/soldiers.json).
 /// </summary>
-public class SoldierRepository : JsonFileRepository<Soldier>, ISoldierRepository
+public class SoldierRepository : UserScopedJsonRepository<Soldier>, ISoldierRepository
 {
-    public SoldierRepository() : base(Path.Combine(AppContext.BaseDirectory, "Data", "soldiers.json"))
+    public SoldierRepository(IUserContextService userContext)
+        : base(userContext, "soldiers.json")
     {
     }
 
     protected override Soldier? GetEntityById(List<Soldier> data, string id)
-    {
-        return data.FirstOrDefault(s => s.Id == id);
-    }
+        => data.FirstOrDefault(s => s.Id == id);
 
     protected override int FindIndexById(List<Soldier> data, string id)
-    {
-        return data.FindIndex(s => s.Id == id);
-    }
+        => data.FindIndex(s => s.Id == id);
 }

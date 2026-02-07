@@ -9,27 +9,30 @@ namespace ShiftScheduler.API.Controllers;
 public class ScheduleController : ControllerBase
 {
     private readonly ISchedulerService _schedulerService;
-    private static List<DaySchedule> _currentSchedule = new();
+    private readonly ICurrentScheduleRepository _scheduleRepository;
 
-    public ScheduleController(ISchedulerService schedulerService)
+    public ScheduleController(ISchedulerService schedulerService, ICurrentScheduleRepository scheduleRepository)
     {
         _schedulerService = schedulerService;
+        _scheduleRepository = scheduleRepository;
     }
 
     [HttpGet]
-    public ActionResult<List<DaySchedule>> Get()
+    public async Task<ActionResult<List<DaySchedule>>> Get()
     {
-        return Ok(_currentSchedule);
+        var schedule = await _scheduleRepository.GetAsync();
+        return Ok(schedule);
     }
 
     /// <summary>דוח בדיקות סופיות לפני סגירה – מי עם הכי מעט/הרבה שמירות, הרווח הכי קצר/ארוך (סעיף 7) + בדיקת אילוצים קשיחים.</summary>
     [HttpGet("validation-report")]
     public async Task<ActionResult<ScheduleValidationReport>> GetValidationReport()
     {
-        if (_currentSchedule == null || !_currentSchedule.Any())
+        var currentSchedule = await _scheduleRepository.GetAsync();
+        if (currentSchedule == null || !currentSchedule.Any())
             return Ok(new ScheduleValidationReport());
-        var report = await _schedulerService.GetScheduleValidationReportAsync(_currentSchedule);
-        var constraintsResult = await _schedulerService.ValidateScheduleHardConstraintsAsync(_currentSchedule);
+        var report = await _schedulerService.GetScheduleValidationReportAsync(currentSchedule);
+        var constraintsResult = await _schedulerService.ValidateScheduleHardConstraintsAsync(currentSchedule);
         report.HardConstraintsValid = constraintsResult.IsValid;
         report.HardConstraintViolations = constraintsResult.Violations ?? new List<string>();
         return Ok(report);
@@ -39,9 +42,10 @@ public class ScheduleController : ControllerBase
     [HttpGet("validate-hard-constraints")]
     public async Task<ActionResult<ScheduleHardConstraintsValidationResult>> ValidateHardConstraints()
     {
-        if (_currentSchedule == null || !_currentSchedule.Any())
+        var currentSchedule = await _scheduleRepository.GetAsync();
+        if (currentSchedule == null || !currentSchedule.Any())
             return Ok(new ScheduleHardConstraintsValidationResult { IsValid = true });
-        var result = await _schedulerService.ValidateScheduleHardConstraintsAsync(_currentSchedule);
+        var result = await _schedulerService.ValidateScheduleHardConstraintsAsync(currentSchedule);
         return Ok(result);
     }
 
@@ -73,7 +77,7 @@ public class ScheduleController : ControllerBase
             {
                 Console.WriteLine($"משמרת ראשונה: {schedule[0].Date}, {schedule[0].Assignments.Count} שיבוצים");
             }
-            _currentSchedule = schedule;
+            await _scheduleRepository.SaveAsync(schedule);
             return Ok(schedule);
         }
         catch (InvalidOperationException ex)
@@ -90,20 +94,20 @@ public class ScheduleController : ControllerBase
     }
 
     [HttpPut]
-    public ActionResult<List<DaySchedule>> Update([FromBody] List<DaySchedule> updatedSchedule)
+    public async Task<ActionResult<List<DaySchedule>>> Update([FromBody] List<DaySchedule> updatedSchedule)
     {
-        _currentSchedule = updatedSchedule;
-        return Ok(_currentSchedule);
+        await _scheduleRepository.SaveAsync(updatedSchedule);
+        return Ok(updatedSchedule);
     }
 
     [HttpPost("swap")]
-    public ActionResult<List<DaySchedule>> SwapSoldiers([FromBody] SwapRequest request)
+    public async Task<ActionResult<List<DaySchedule>>> SwapSoldiers([FromBody] SwapRequest request)
     {
         if (string.IsNullOrEmpty(request.Soldier1Id) || string.IsNullOrEmpty(request.Soldier2Id))
             return BadRequest("נדרשות 2 ID של חיילים");
 
-        // Swap all assignments of soldier1 with soldier2
-        foreach (var daySchedule in _currentSchedule)
+        var currentSchedule = await _scheduleRepository.GetAsync();
+        foreach (var daySchedule in currentSchedule)
         {
             foreach (var assignment in daySchedule.Assignments)
             {
@@ -120,29 +124,28 @@ public class ScheduleController : ControllerBase
             }
         }
 
-        return Ok(_currentSchedule);
+        await _scheduleRepository.SaveAsync(currentSchedule);
+        return Ok(currentSchedule);
     }
 
     [HttpPost("replace")]
-    public ActionResult<List<DaySchedule>> ReplaceAssignment([FromBody] ReplaceRequest request)
+    public async Task<ActionResult<List<DaySchedule>>> ReplaceAssignment([FromBody] ReplaceRequest request)
     {
         if (string.IsNullOrEmpty(request.Date) || string.IsNullOrEmpty(request.PositionId) || 
             string.IsNullOrEmpty(request.NewSoldierId))
             return BadRequest("נדרשים כל הפרמטרים");
 
-        // Find the specific assignment and replace
-        var daySchedule = _currentSchedule.FirstOrDefault(s => s.Date == request.Date && s.ShiftNumber == request.ShiftNumber);
+        var currentSchedule = await _scheduleRepository.GetAsync();
+        var daySchedule = currentSchedule.FirstOrDefault(s => s.Date == request.Date && s.ShiftNumber == request.ShiftNumber);
         if (daySchedule == null)
             return NotFound("משמרת לא נמצאה");
 
-        // If OldSoldierId is provided, find that specific assignment, otherwise find any assignment for this position
         var assignment = string.IsNullOrEmpty(request.OldSoldierId) 
             ? daySchedule.Assignments.FirstOrDefault(a => a.PositionId == request.PositionId)
             : daySchedule.Assignments.FirstOrDefault(a => a.PositionId == request.PositionId && a.SoldierId == request.OldSoldierId);
         
         if (assignment == null)
         {
-            // If no assignment exists, create a new one
             assignment = new ShiftAssignment
             {
                 PositionId = request.PositionId,
@@ -154,7 +157,8 @@ public class ScheduleController : ControllerBase
         assignment.SoldierId = request.NewSoldierId;
         assignment.SoldierName = request.NewSoldierName;
 
-        return Ok(_currentSchedule);
+        await _scheduleRepository.SaveAsync(currentSchedule);
+        return Ok(currentSchedule);
     }
 }
 

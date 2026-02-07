@@ -4,70 +4,85 @@ using ShiftScheduler.API.Interfaces;
 namespace ShiftScheduler.API.Repositories;
 
 /// <summary>
-/// Generic JSON file repository implementation
-/// Single Responsibility: Handles file-based persistence
+/// JSON file repository scoped to current user: Data/{userId}/{fileName}.
 /// </summary>
-public class JsonFileRepository<T> : IRepository<T> where T : class
+public abstract class UserScopedJsonRepository<T> : IRepository<T> where T : class
 {
-    private readonly string _filePath;
+    private readonly IUserContextService _userContext;
+    private readonly string _fileName;
     private readonly JsonSerializerOptions _jsonOptions;
+    private string? _lastPath;
     private List<T>? _cache;
 
-    public JsonFileRepository(string filePath)
+    protected UserScopedJsonRepository(IUserContextService userContext, string fileName)
     {
-        _filePath = filePath;
+        _userContext = userContext;
+        _fileName = fileName;
         _jsonOptions = new JsonSerializerOptions
         {
             WriteIndented = true,
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
-        EnsureDirectoryExists();
     }
 
-    private void EnsureDirectoryExists()
+    private string GetFilePath()
     {
-        var directory = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
+        var userId = _userContext.GetCurrentUserId();
+        if (string.IsNullOrEmpty(userId)) return string.Empty;
+        return Path.Combine(AppContext.BaseDirectory, "Data", userId, _fileName);
+    }
+
+    private void EnsureDirectoryExists(string? path)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
     }
 
     private async Task<List<T>> LoadDataAsync()
     {
-        if (_cache != null)
+        var path = GetFilePath();
+        if (string.IsNullOrEmpty(path)) return new List<T>();
+
+        EnsureDirectoryExists(path);
+
+        if (_cache != null && _lastPath == path)
             return _cache;
 
-        if (!File.Exists(_filePath))
+        if (!File.Exists(path))
         {
             _cache = new List<T>();
+            _lastPath = path;
             return _cache;
         }
 
         try
         {
-            var json = await File.ReadAllTextAsync(_filePath);
+            var json = await File.ReadAllTextAsync(path);
             _cache = JsonSerializer.Deserialize<List<T>>(json, _jsonOptions) ?? new List<T>();
+            _lastPath = path;
             return _cache;
         }
         catch
         {
             _cache = new List<T>();
+            _lastPath = path;
             return _cache;
         }
     }
 
     private async Task SaveDataAsync(List<T> data)
     {
+        var path = GetFilePath();
+        if (string.IsNullOrEmpty(path)) return;
+        EnsureDirectoryExists(path);
         var json = JsonSerializer.Serialize(data, _jsonOptions);
-        await File.WriteAllTextAsync(_filePath, json);
+        await File.WriteAllTextAsync(path, json);
         _cache = data;
+        _lastPath = path;
     }
 
-    public async Task<List<T>> GetAllAsync()
-    {
-        return await LoadDataAsync();
-    }
+    public async Task<List<T>> GetAllAsync() => await LoadDataAsync();
 
     public async Task<T?> GetByIdAsync(string id)
     {
@@ -75,11 +90,8 @@ public class JsonFileRepository<T> : IRepository<T> where T : class
         return GetEntityById(data, id);
     }
 
-    protected virtual T? GetEntityById(List<T> data, string id)
-    {
-        // This will be overridden in derived classes
-        return data.FirstOrDefault();
-    }
+    protected abstract T? GetEntityById(List<T> data, string id);
+    protected abstract int FindIndexById(List<T> data, string id);
 
     public async Task<T> CreateAsync(T entity)
     {
@@ -93,37 +105,21 @@ public class JsonFileRepository<T> : IRepository<T> where T : class
     {
         var data = await LoadDataAsync();
         var index = FindIndexById(data, id);
-        
-        if (index == -1)
-            return null;
-
+        if (index == -1) return null;
         data[index] = entity;
         await SaveDataAsync(data);
         return entity;
-    }
-
-    protected virtual int FindIndexById(List<T> data, string id)
-    {
-        // This will be overridden in derived classes
-        return -1;
     }
 
     public async Task<bool> DeleteAsync(string id)
     {
         var data = await LoadDataAsync();
         var index = FindIndexById(data, id);
-        
-        if (index == -1)
-            return false;
-
+        if (index == -1) return false;
         data.RemoveAt(index);
         await SaveDataAsync(data);
         return true;
     }
 
-    public async Task SaveAsync()
-    {
-        var data = await LoadDataAsync();
-        await SaveDataAsync(data);
-    }
+    public Task SaveAsync() => Task.CompletedTask;
 }

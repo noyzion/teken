@@ -1,17 +1,20 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
+using Microsoft.IdentityModel.Tokens;
 using ShiftScheduler.API.Interfaces;
 using ShiftScheduler.API.Repositories;
 using ShiftScheduler.API.Services;
-using Microsoft.Extensions.FileProviders;
-using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container
-builder.Services.AddControllers();
+var requireAuth = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+builder.Services.AddControllers(options => options.Filters.Add(new AuthorizeFilter(requireAuth)));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
 
-// CORS configuration
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -22,15 +25,36 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Dependency Injection - Dependency Inversion Principle
+var jwtKey = builder.Configuration["Jwt:Key"] ?? "ShiftScheduler-SecretKey-ChangeInProduction-Min32Chars!";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ShiftScheduler",
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ShiftScheduler",
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+builder.Services.AddAuthorization();
+
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IUserContextService, UserContextService>();
 builder.Services.AddScoped<IPositionRepository, PositionRepository>();
 builder.Services.AddScoped<ISoldierRepository, SoldierRepository>();
+builder.Services.AddScoped<ISoldierGroupRepository, SoldierGroupRepository>();
+builder.Services.AddScoped<ISettingsRepository, SettingsRepository>();
+builder.Services.AddScoped<ICurrentScheduleRepository, CurrentScheduleRepository>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -38,14 +62,15 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+app.UseAuthentication();
 
 // Serve static files from frontend directory (sibling of backend)
-var frontendPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "frontend"));
-if (Directory.Exists(frontendPath))
+var frontendPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(builder.Environment.ContentRootPath, "..", "frontend"));
+if (System.IO.Directory.Exists(frontendPath))
 {
     app.UseStaticFiles(new StaticFileOptions
     {
-        FileProvider = new PhysicalFileProvider(frontendPath),
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(frontendPath),
         RequestPath = ""
     });
 }
@@ -56,15 +81,16 @@ else
 }
 
 app.UseAuthorization();
+
 app.MapControllers();
 
 // Default route to serve index.html from frontend
-var indexPath = Path.Combine(frontendPath, "index.html");
-if (File.Exists(indexPath))
+var indexPath = System.IO.Path.Combine(frontendPath, "index.html");
+if (System.IO.File.Exists(indexPath))
 {
     app.MapFallbackToFile("index.html", new StaticFileOptions
     {
-        FileProvider = new PhysicalFileProvider(frontendPath)
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(frontendPath)
     });
 }
 else

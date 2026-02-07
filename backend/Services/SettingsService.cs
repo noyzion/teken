@@ -10,11 +10,11 @@ namespace ShiftScheduler.API.Services;
 /// </summary>
 public class SettingsService : ISettingsService
 {
-    private readonly SettingsRepository _repository;
+    private readonly ISettingsRepository _repository;
 
-    public SettingsService()
+    public SettingsService(ISettingsRepository repository)
     {
-        _repository = new SettingsRepository();
+        _repository = repository;
     }
 
     public async Task<SchedulerSettings> GetSettingsAsync()

@@ -1,4 +1,5 @@
 const API_BASE = '/api';
+const AUTH_TOKEN_KEY = 'shift_scheduler_token';
 
 let positions = [];
 let soldiers = [];
@@ -8,17 +9,134 @@ let editMode = false;
 let scheduleHistory = []; // היסטוריית שינויים לביטול
 
 const DAYS_OF_WEEK = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-let selectedDayForHours = null; // יום נבחר לבחירת שעות
+let selectedDayForHours = null;
+
+function getAuthToken() {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+function setAuthToken(token) {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+function clearAuthToken() {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+async function apiFetch(url, options = {}) {
+    const token = getAuthToken();
+    const headers = { ...(options.headers || {}) };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+        clearAuthToken();
+        showAuthScreen();
+        throw new Error('Unauthorized');
+    }
+    return response;
+}
+
+function showAuthScreen() {
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('appScreen').style.display = 'none';
+}
+function showAppScreen(email) {
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    const el = document.getElementById('userEmail');
+    if (el) el.textContent = email || '';
+}
+
+async function checkAuth() {
+    const token = getAuthToken();
+    if (!token) {
+        showAuthScreen();
+        return;
+    }
+    try {
+        const response = await fetch(API_BASE + '/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (!response.ok) {
+            clearAuthToken();
+            showAuthScreen();
+            return;
+        }
+        const data = await response.json();
+        showAppScreen(data.email);
+        await loadData();
+    } catch (e) {
+        clearAuthToken();
+        showAuthScreen();
+    }
+}
+
+function setupAuthForm() {
+    const tabs = document.querySelectorAll('.auth-tab');
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('authSubmitBtn');
+    const errorEl = document.getElementById('authError');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const isRegister = tab.dataset.authTab === 'register';
+            submitBtn.textContent = isRegister ? 'הירשם' : 'התחבר';
+            if (errorEl) errorEl.style.display = 'none';
+        });
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const isRegister = document.querySelector('.auth-tab.active').dataset.authTab === 'register';
+        const email = document.getElementById('authEmail').value.trim().toLowerCase();
+        const password = document.getElementById('authPassword').value;
+        if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+        if (!email || !password) {
+            if (errorEl) { errorEl.textContent = 'נא להזין אימייל וסיסמה'; errorEl.style.display = 'block'; }
+            return;
+        }
+        if (isRegister && password.length < 6) {
+            if (errorEl) { errorEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים'; errorEl.style.display = 'block'; }
+            return;
+        }
+        submitBtn.disabled = true;
+        try {
+            const endpoint = isRegister ? '/auth/register' : '/auth/login';
+            const response = await fetch(API_BASE + endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                if (errorEl) { errorEl.textContent = data || response.statusText || 'שגיאה'; errorEl.style.display = 'block'; }
+                return;
+            }
+            if (data.token) setAuthToken(data.token);
+            showAppScreen(data.email);
+            await loadData();
+            form.reset();
+        } catch (err) {
+            if (errorEl) { errorEl.textContent = 'שגיאת רשת'; errorEl.style.display = 'block'; }
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+}
+
+function logout() {
+    clearAuthToken();
+    showAuthScreen();
+}
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+    setupAuthForm();
     setupTabs();
-    loadData();
     setDefaultDates();
     setupDaysGroup();
     setupDayHoursSelector();
-    
-    // Setup constraint soldier select change event
+
     const constraintSoldierSelect = document.getElementById('constraintSoldier');
     if (constraintSoldierSelect) {
         constraintSoldierSelect.addEventListener('change', function() {
@@ -26,10 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Setup Enter key for settings
     document.getElementById('globalShiftHours').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') saveSettings();
     });
+
+    checkAuth();
 });
 
 function setupTabs() {
@@ -146,7 +265,7 @@ async function loadData() {
 // Settings Management
 async function loadSettings() {
     try {
-        const response = await fetch(`${API_BASE}/settings`);
+        const response = await apiFetch(`${API_BASE}/settings`);
         settings = await response.json();
         document.getElementById('globalShiftHours').value = settings.shiftHours || 8;
     } catch (error) {
@@ -167,7 +286,7 @@ async function saveSettings() {
     statusDiv.className = '';
 
     try {
-        const response = await fetch(`${API_BASE}/settings`, {
+        const response = await apiFetch(`${API_BASE}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ shiftHours: shiftHours })
@@ -191,7 +310,7 @@ async function saveSettings() {
 
 async function loadPositions() {
     try {
-        const response = await fetch(`${API_BASE}/positions`);
+        const response = await apiFetch(`${API_BASE}/positions`);
         positions = await response.json();
         displayPositions();
     } catch (error) {
@@ -201,7 +320,7 @@ async function loadPositions() {
 
 async function loadSoldiers() {
     try {
-        const response = await fetch(`${API_BASE}/soldiers`);
+        const response = await apiFetch(`${API_BASE}/soldiers`);
         soldiers = await response.json();
         displaySoldiers();
     } catch (error) {
@@ -228,7 +347,7 @@ async function addPosition() {
     };
 
     try {
-        const response = await fetch(`${API_BASE}/positions`, {
+        const response = await apiFetch(`${API_BASE}/positions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newPosition)
@@ -269,13 +388,13 @@ function displayPositions() {
     list.innerHTML = `
         <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
             <button class="btn-secondary" id="selectAllPositionsBtn" onclick="selectAllPositions()">
-                <span>בחר הכל</span>
+                <i class="fa-solid fa-check-double btn-icon"></i><span>בחר הכל</span>
             </button>
             <button class="btn-secondary" id="deselectAllPositionsBtn" onclick="deselectAllPositions()" style="display: none;">
-                <span>בטל בחירה</span>
+                <i class="fa-solid fa-square btn-icon"></i><span>בטל בחירה</span>
             </button>
             <button class="btn-delete" id="deleteSelectedPositionsBtn" onclick="deleteSelectedPositions()" style="display: none;">
-                <span>מחק נבחרים</span>
+                <i class="fa-solid fa-trash-can btn-icon"></i><span>מחק נבחרים</span>
             </button>
         </div>
         ${positions.map(pos => `
@@ -291,7 +410,7 @@ function displayPositions() {
                 </div>
             </div>
             <div class="actions">
-                <button class="btn-delete" onclick="deletePosition('${pos.id}')">מחק</button>
+                <button class="btn-delete" onclick="deletePosition('${pos.id}')"><i class="fa-solid fa-trash-can btn-icon"></i>מחק</button>
             </div>
         </div>
     `).join('')}`;
@@ -317,7 +436,7 @@ function updatePositionSelection() {
         selectAllBtn.style.display = 'none';
         deselectAllBtn.style.display = 'inline-block';
         deleteBtn.style.display = 'inline-block';
-        deleteBtn.innerHTML = `<span>מחק נבחרים (${selected})</span>`;
+        deleteBtn.innerHTML = `<i class="fa-solid fa-trash-can btn-icon"></i><span>מחק נבחרים (${selected})</span>`;
     } else {
         selectAllBtn.style.display = 'inline-block';
         deselectAllBtn.style.display = 'none';
@@ -344,7 +463,7 @@ async function deleteSelectedPositions() {
     
     for (const id of selected) {
         try {
-            const response = await fetch(`${API_BASE}/positions/${id}`, {
+            const response = await apiFetch(`${API_BASE}/positions/${id}`, {
                 method: 'DELETE'
             });
             
@@ -374,7 +493,7 @@ async function deletePosition(id) {
     if (!confirm('האם אתה בטוח שברצונך למחוק את העמדה?')) return;
 
     try {
-        const response = await fetch(`${API_BASE}/positions/${id}`, {
+        const response = await apiFetch(`${API_BASE}/positions/${id}`, {
             method: 'DELETE'
         });
 
@@ -435,10 +554,17 @@ async function addSoldier() {
         return;
     }
 
-    await addSoldierByName(name, isCommander);
-    document.getElementById('soldierName').value = '';
-    document.getElementById('soldierIsCommander').checked = false;
-    document.getElementById('soldierName').focus();
+    try {
+        await addSoldierByName(name, isCommander);
+        document.getElementById('soldierName').value = '';
+        document.getElementById('soldierIsCommander').checked = false;
+        document.getElementById('soldierName').focus();
+        displaySoldiers();
+        updateConstraintsUI();
+        showNotification(`חייל "${name}" נוסף בהצלחה`, 'success');
+    } catch (error) {
+        showNotification(error.message || 'שגיאה בהוספת החייל', 'error');
+    }
 }
 
 async function addMultipleSoldiers() {
@@ -522,7 +648,7 @@ async function addSoldierByName(name, isCommander = false) {
         constraints: {}
     };
 
-        const response = await fetch(`${API_BASE}/soldiers`, {
+        const response = await apiFetch(`${API_BASE}/soldiers`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newSoldier)
@@ -569,7 +695,7 @@ function displaySoldiers() {
                            class="modern-checkbox">
                     <span style="font-size: 0.9em;">מפקד</span>
                 </label>
-                <button class="btn-delete" onclick="deleteSoldier('${soldier.id}')">מחק</button>
+                <button class="btn-delete" onclick="deleteSoldier('${soldier.id}')"><i class="fa-solid fa-trash-can btn-icon"></i>מחק</button>
             </div>
         </div>
     `).join('')}`;
@@ -582,7 +708,7 @@ async function toggleCommander(id, isCommander) {
     soldier.isCommander = isCommander;
 
     try {
-        const response = await fetch(`${API_BASE}/soldiers/${id}`, {
+        const response = await apiFetch(`${API_BASE}/soldiers/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(soldier)
@@ -616,7 +742,7 @@ async function deleteSoldier(id) {
     if (!confirm(`האם אתה בטוח שברצונך למחוק את ${soldier.name}?`)) return;
 
     try {
-        const response = await fetch(`${API_BASE}/soldiers/${id}`, {
+        const response = await apiFetch(`${API_BASE}/soldiers/${id}`, {
             method: 'DELETE'
         });
 
@@ -844,7 +970,7 @@ function addHourRangeUI(startDay, startHour, endHour, endDay) {
             ${endDaySelect}
             ${endHourSelect}
             <button type="button" class="btn-delete" onclick="removeHourRange('${rangeId}')" style="margin-right: auto;">
-                <span>🗑️ מחק</span>
+                <i class="fa-solid fa-trash-can btn-icon"></i><span>מחק</span>
             </button>
         </div>
     `;
@@ -983,12 +1109,12 @@ function displayConstraints() {
                 <button class="btn-secondary" onclick="editSoldierConstraints('${escapedSoldierId}')" 
                         style="padding: 4px 8px; font-size: 0.85em;" 
                         title="ערוך ${escapedLabel}">
-                    <span>✏️</span>
+                    <i class="fa-solid fa-pen-to-square"></i>
                 </button>
                 <button class="btn-delete" onclick="removeConstraint('${escapedSoldierId}', '${escapedItemType}')" 
                         style="padding: 4px 8px; font-size: 0.85em;" 
                         title="מחק ${escapedLabel}">
-                    <span>🗑️</span>
+                    <i class="fa-solid fa-trash-can"></i>
                 </button>
             </div>
         `;
@@ -1008,11 +1134,11 @@ function displayConstraints() {
                 <div class="actions" style="display: flex; gap: 8px; flex-direction: column;">
                     <button class="btn-primary" onclick="editSoldierConstraints('${escapedSoldierId}')" 
                             title="ערוך את האילוצים של חייל זה" style="white-space: nowrap;">
-                        <span>✏️ ערוך</span>
+                        <i class="fa-solid fa-pen-to-square btn-icon"></i><span>ערוך</span>
                     </button>
                     <button class="btn-delete" onclick="clearSoldierConstraints('${escapedSoldierId}', '${escapedSoldierName}')" 
                             title="מחק את כל האילוצים של חייל זה" style="white-space: nowrap;">
-                        <span>🗑️ מחק הכל</span>
+                        <i class="fa-solid fa-trash-can btn-icon"></i><span>מחק הכל</span>
                     </button>
                 </div>
             </div>
@@ -1105,7 +1231,7 @@ async function saveConstraints() {
     };
 
     try {
-        const response = await fetch(`${API_BASE}/soldiers/${soldierId}`, {
+        const response = await apiFetch(`${API_BASE}/soldiers/${soldierId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(soldier)
@@ -1186,7 +1312,7 @@ function addShiftRequestRow() {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'btn-secondary';
-    removeBtn.textContent = 'הסר';
+    removeBtn.innerHTML = '<i class="fa-solid fa-xmark btn-icon"></i><span>הסר</span>';
     removeBtn.onclick = () => row.remove();
     row.appendChild(select);
     row.appendChild(dateInput);
@@ -1275,39 +1401,26 @@ async function generateSchedule() {
         shiftRequests: shiftRequests.length ? shiftRequests : undefined
     };
     
-    console.log('=== יצירת לוח זמנים - התחלה ===');
-    console.log('נתוני בקשה:', requestData);
-    console.log('מספר עמדות:', positions.length);
-    console.log('מספר חיילים:', soldiers.length);
 
     try {
-        const response = await fetch(`${API_BASE}/schedule/generate`, {
+        const response = await apiFetch(`${API_BASE}/schedule/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         });
 
-        console.log('תגובת שרת - סטטוס:', response.status, response.statusText);
 
         if (response.ok) {
             schedule = await response.json();
-            console.log('לוח זמנים התקבל:', schedule);
-            console.log('מספר שמירות בלוח:', schedule.length);
-            if (schedule.length > 0) {
-                console.log('שמירה ראשונה:', schedule[0]);
-                console.log('מספר שיבוצים בשמירה ראשונה:', schedule[0].assignments?.length || 0);
-            }
             
             statusDiv.innerHTML = '<p class="success">לוח זמנים נוצר בהצלחה!</p>';
             statusDiv.className = 'success';
             
             // Switch to view tab and display schedule
             setTimeout(() => {
-                console.log('עובר לטאב לוח זמנים...');
                 const viewTab = document.querySelector('[data-tab="view"]');
                 if (viewTab) {
                     viewTab.click();
-                    console.log('קורא ל-displaySchedule...');
                     displaySchedule();
                 } else {
                     console.error('לא נמצא טאב לוח זמנים!');
@@ -1325,12 +1438,11 @@ async function generateSchedule() {
         statusDiv.className = 'error';
     }
     
-    console.log('=== יצירת לוח זמנים - סיום ===');
 }
 
 async function loadSchedule() {
     try {
-        const response = await fetch(`${API_BASE}/schedule`);
+        const response = await apiFetch(`${API_BASE}/schedule`);
         if (response.ok) {
             schedule = await response.json();
             displaySchedule();
@@ -1365,10 +1477,6 @@ function toggleEditMode() {
 }
 
 function displaySchedule() {
-    console.log('=== displaySchedule - התחלה ===');
-    console.log('לוח זמנים נוכחי:', schedule);
-    console.log('מספר שמירות:', schedule.length);
-    
     const view = document.getElementById('scheduleView');
     if (!view) {
         console.error('לא נמצא אלמנט scheduleView!');
@@ -1376,7 +1484,6 @@ function displaySchedule() {
     }
     
     if (schedule.length === 0) {
-        console.log('לוח זמנים ריק - מציג הודעת ריק');
         view.innerHTML = `
             <div class="empty-state">
                 <p>אין לוח זמנים</p>
@@ -1385,8 +1492,6 @@ function displaySchedule() {
         `;
         return;
     }
-
-    console.log('מתחיל לבנות טבלה...');
 
     // Get all unique dates and positions
     const datesSet = new Set();
@@ -1446,28 +1551,28 @@ function displaySchedule() {
     // Calculate statistics for each soldier
     const soldierStats = calculateSoldierStats(schedule, allSoldiers);
     
-    // Generate colors for soldiers
+    // Colorful palette for soldiers (stats border + name)
     const soldierColors = {};
     const soldierColorPalette = [
-        '#2d5016', // Dark green
-        '#166534', // Green
-        '#15803d', // Forest
-        '#16a34a', // Emerald
-        '#22c55e', // Lime
-        '#4a7c23', // Olive
-        '#556b2f', // Army green
-        '#65a30d', // Leaf
-        '#84cc16', // Lime green
-        '#ef4444', // Red
-        '#f59e0b', // Amber
-        '#f97316', // Orange
-        '#14b8a6', // Teal
-        '#06b6d4', // Cyan
-        '#22c55e', // Green
-        '#eab308'  // Yellow
+        '#166534', '#1d4ed8', '#7c2d12', '#4c1d95', '#0e7490',
+        '#b45309', '#be123c', '#047857', '#1e40af', '#6b21a8',
+        '#0d9488', '#c2410c', '#9f1239', '#15803d', '#2563eb',
+        '#a21caf', '#0369a1', '#ea580c'
     ];
     allSoldiers.forEach((soldier, index) => {
         soldierColors[soldier.id] = soldierColorPalette[index % soldierColorPalette.length];
+    });
+
+    // Pastel background colors for schedule cells – each soldier a different color (colorful)
+    const soldierPastelBg = {};
+    const pastelBgPalette = [
+        '#dcfce7', '#dbeafe', '#fce7f3', '#e9d5ff', '#cffafe',
+        '#ffedd5', '#fed7aa', '#fecdd3', '#ddd6fe', '#bbf7d0',
+        '#a5f3fc', '#fde68a', '#fbcfe8', '#bfdbfe', '#d8b4fe',
+        '#99f6e4', '#fed7aa', '#fecaca', '#e0e7ff', '#ccfbf1'
+    ];
+    allSoldiers.forEach((soldier, index) => {
+        soldierPastelBg[soldier.id] = pastelBgPalette[index % pastelBgPalette.length];
     });
     
     // Build hour-based schedule map: date -> position -> hour -> soldier
@@ -1619,26 +1724,26 @@ function displaySchedule() {
             // Time column
             tableHTML += `<td class="time-cell">${startTime}-${endTime}</td>`;
             
-            // Position columns
+            // Position columns – each soldier in its own color (pastel background)
             allPositions.forEach(pos => {
                 const assignment = assignments.find(a => {
                     const aPosId = a.positionId || a.PositionId;
                     return aPosId === pos.id;
                 });
-                const positionColor = positionColors[pos.id] || '#ffffff';
+                const emptyCellBg = '#f3f4f6';
                 if (assignment) {
                     const soldierId = assignment.soldierId || assignment.SoldierId || '';
                     const soldierName = assignment.soldierName || assignment.SoldierName || '';
+                    const cellBg = soldierId ? (soldierPastelBg[soldierId] || pastelBgPalette[0]) : emptyCellBg;
                     const editClass = editMode ? 'editable-cell' : '';
                     const shiftNumber = shift.shiftNumber !== undefined ? shift.shiftNumber : shift.ShiftNumber;
                     const onClick = editMode ? `onclick="openEditCell('${date}', ${shiftNumber}, '${pos.id}', '${soldierId}', '${soldierName}', '${pos.name}')"` : `onclick="highlightSoldier('${soldierId}')"`;
-                    tableHTML += `<td class="soldier-cell ${editClass}" data-soldier-id="${soldierId}" style="background-color: ${positionColor};" title="${soldierName}" ${onClick}>${soldierName}</td>`;
+                    tableHTML += `<td class="soldier-cell ${editClass}" data-soldier-id="${soldierId}" style="background-color: ${cellBg};" title="${soldierName}" ${onClick}>${soldierName}</td>`;
                 } else {
                     const editClass = editMode ? 'editable-cell' : '';
-                    const startHour = new Date(start).getHours();
                     const shiftNumber = shift.shiftNumber !== undefined ? shift.shiftNumber : shift.ShiftNumber;
                     const onClick = editMode ? `onclick="openEditCell('${date}', ${shiftNumber}, '${pos.id}', '', '', '${pos.name}')"` : '';
-                    tableHTML += `<td class="empty-cell ${editClass}" style="background-color: ${positionColor};" ${onClick}>-</td>`;
+                    tableHTML += `<td class="empty-cell ${editClass}" style="background-color: ${emptyCellBg};" ${onClick}>-</td>`;
                 }
             });
             
@@ -1647,20 +1752,17 @@ function displaySchedule() {
     });
     
     tableHTML += '</tbody></table></div>';
-    console.log('מציג טבלה...');
-    console.log('אורך statsHTML:', statsHTML.length);
-    console.log('אורך tableHTML:', tableHTML.length);
-    
+
     // Add export button section
     const exportHTML = `
         <div class="export-section" style="margin-top: 30px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 1px solid #e5e7eb;">
             <h3 style="margin: 0 0 15px 0; color: #1f2937;">ייצוא לוח זמנים</h3>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn-primary" onclick="exportToCSV()" style="display: flex; align-items: center; gap: 8px;">
-                    <span>📥 ייצא ל-CSV</span>
+                    <i class="fa-solid fa-file-csv btn-icon"></i><span>ייצא ל-CSV</span>
                 </button>
                 <button class="btn-primary" onclick="exportToGoogleSheets()" style="display: flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #34a853 0%, #2d8f47 100%);">
-                    <span>📊 ייצא ל-Google Sheets</span>
+                    <i class="fa-solid fa-table-cells btn-icon"></i><span>ייצא ל-Google Sheets</span>
                 </button>
             </div>
             <p style="margin-top: 10px; font-size: 0.85em; color: #6b7280;">
@@ -1672,8 +1774,6 @@ function displaySchedule() {
     
     // מציגים קודם את הטבלה, אז את הסטטיסטיקות, ואז את כפתורי הייצוא
     view.innerHTML = tableHTML + statsHTML + exportHTML;
-    console.log('טבלה הוצגה בהצלחה');
-    console.log('=== displaySchedule - סיום ===');
 }
 
 function calculateSoldierStats(schedule, allSoldiers) {
@@ -2075,7 +2175,7 @@ async function replaceSoldierInShift(date, shiftNumber, positionId, positionName
     saveScheduleState();
     
     try {
-        const response = await fetch(`${API_BASE}/schedule/replace`, {
+        const response = await apiFetch(`${API_BASE}/schedule/replace`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2127,7 +2227,7 @@ async function swapSoldiers(soldier1Id, soldier1Name) {
     saveScheduleState();
     
     try {
-        const response = await fetch(`${API_BASE}/schedule/swap`, {
+        const response = await apiFetch(`${API_BASE}/schedule/swap`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -2195,7 +2295,7 @@ async function removeConstraint(soldierId, constraintType) {
     soldier.constraints[constraintType] = null;
     
     try {
-        const response = await fetch(`${API_BASE}/soldiers/${soldierId}`, {
+        const response = await apiFetch(`${API_BASE}/soldiers/${soldierId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(soldier)
@@ -2253,7 +2353,7 @@ async function clearAllConstraints() {
         };
         
         try {
-            const response = await fetch(`${API_BASE}/soldiers/${soldier.id}`, {
+            const response = await apiFetch(`${API_BASE}/soldiers/${soldier.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(soldier)
@@ -2330,7 +2430,7 @@ async function clearSoldierConstraints(soldierId, soldierName) {
     };
     
     try {
-        const response = await fetch(`${API_BASE}/soldiers/${soldierId}`, {
+        const response = await apiFetch(`${API_BASE}/soldiers/${soldierId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(soldier)
@@ -2700,7 +2800,7 @@ async function exportToGoogleSheets() {
 // הורדת קובץ אקסל ריק בפורמט הנדרש להעלאה
 async function downloadExcelTemplate() {
     try {
-        const res = await fetch(API_BASE + '/ScheduleExcel/template');
+        const res = await apiFetch(API_BASE + '/ScheduleExcel/template');
         if (!res.ok) throw new Error(res.statusText || 'שגיאה בהורדה');
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -2746,7 +2846,7 @@ async function uploadExcelAndShowStats() {
     formData.append('file', file);
 
     try {
-        const res = await fetch(API_BASE + '/ScheduleExcel/upload', {
+        const res = await apiFetch(API_BASE + '/ScheduleExcel/upload', {
             method: 'POST',
             body: formData
         });
@@ -2813,7 +2913,7 @@ async function loadScheduleConstraintsReport() {
     const block = document.getElementById('scheduleConstraintsBlock');
     if (!block) return;
     try {
-        const res = await fetch(API_BASE + '/schedule/validation-report');
+        const res = await apiFetch(API_BASE + '/schedule/validation-report');
         if (!res.ok) return;
         const report = await res.json();
         const valid = report.hardConstraintsValid;

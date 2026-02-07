@@ -4,15 +4,12 @@ using ShiftScheduler.API.Models;
 
 namespace ShiftScheduler.API.Repositories;
 
-/// <summary>
-/// Settings repository - user-scoped (Data/{userId}/settings.json).
-/// </summary>
-public class SettingsRepository : ISettingsRepository
+public class CurrentScheduleRepository : ICurrentScheduleRepository
 {
     private readonly IUserContextService _userContext;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public SettingsRepository(IUserContextService userContext)
+    public CurrentScheduleRepository(IUserContextService userContext)
     {
         _userContext = userContext;
         _jsonOptions = new JsonSerializerOptions
@@ -26,40 +23,41 @@ public class SettingsRepository : ISettingsRepository
     {
         var userId = _userContext.GetCurrentUserId();
         if (string.IsNullOrEmpty(userId)) return string.Empty;
-        return Path.Combine(AppContext.BaseDirectory, "Data", userId, "settings.json");
+        return Path.Combine(AppContext.BaseDirectory, "Data", userId, "currentSchedule.json");
     }
 
     private void EnsureDirectoryExists(string? path)
     {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            Directory.CreateDirectory(directory);
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
     }
 
-    public async Task<SchedulerSettings> LoadSettingsAsync()
+    public async Task<List<DaySchedule>> GetAsync()
     {
         var path = GetFilePath();
         if (string.IsNullOrEmpty(path) || !File.Exists(path))
-            return new SchedulerSettings { ShiftHours = 8 };
+            return new List<DaySchedule>();
 
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            return JsonSerializer.Deserialize<SchedulerSettings>(json, _jsonOptions)
-                ?? new SchedulerSettings { ShiftHours = 8 };
+            var list = JsonSerializer.Deserialize<List<DaySchedule>>(json, _jsonOptions);
+            return list ?? new List<DaySchedule>();
         }
         catch
         {
-            return new SchedulerSettings { ShiftHours = 8 };
+            return new List<DaySchedule>();
         }
     }
 
-    public async Task SaveSettingsAsync(SchedulerSettings settings)
+    public async Task SaveAsync(List<DaySchedule> schedule)
     {
         var path = GetFilePath();
         if (string.IsNullOrEmpty(path)) return;
         EnsureDirectoryExists(path);
-        var json = JsonSerializer.Serialize(settings, _jsonOptions);
+        var json = JsonSerializer.Serialize(schedule, _jsonOptions);
         await File.WriteAllTextAsync(path, json);
     }
+
 }

@@ -6,75 +6,106 @@
     <title>מערכת ניהול שמירות</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Auth screen: login / register -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-card">
+            <h1><i class="fa-solid fa-calendar-check auth-title-icon"></i> מערכת ניהול שמירות</h1>
+            <p class="auth-subtitle">התחבר או הירשם כדי לשמור את הנתונים שלך</p>
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab active" data-auth-tab="login">התחברות</button>
+                <button type="button" class="auth-tab" data-auth-tab="register">הרשמה</button>
+            </div>
+            <div id="authError" class="auth-error" style="display: none;"></div>
+            <form id="loginForm" class="auth-form">
+                <label class="input-label">
+                    <span class="label-text">אימייל</span>
+                    <input type="email" id="authEmail" class="modern-input" required placeholder="your@email.com">
+                </label>
+                <label class="input-label">
+                    <span class="label-text">סיסמה</span>
+                    <input type="password" id="authPassword" class="modern-input" required placeholder="לפחות 6 תווים">
+                </label>
+                <button type="submit" class="btn-primary btn-block" id="authSubmitBtn">התחבר</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="appScreen" class="container" style="display: none;">
         <header>
             <div class="header-content">
-                <h1>מערכת ניהול שמירות</h1>
-                <p class="subtitle">ניהול חכם ויעיל של חלוקת שמירות</p>
+                <div>
+                    <h1>מערכת ניהול שמירות</h1>
+                    <p class="subtitle">ניהול חכם ויעיל של חלוקת שמירות</p>
+                </div>
+                <div class="header-auth">
+                    <span id="userEmail" class="user-email"></span>
+                    <button type="button" class="btn-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> התנתק</button>
+                </div>
             </div>
         </header>
 
         <nav class="tabs">
             <button class="tab-btn active" data-tab="home">
-                <span>עמוד בית</span>
+                <i class="fa-solid fa-house tab-icon"></i><span>עמוד בית</span>
             </button>
             <button class="tab-btn" data-tab="settings">
-                <span>הגדרות</span>
+                <i class="fa-solid fa-gear tab-icon"></i><span>הגדרות</span>
             </button>
             <button class="tab-btn" data-tab="positions">
-                <span>עמדות</span>
+                <i class="fa-solid fa-location-dot tab-icon"></i><span>עמדות</span>
             </button>
             <button class="tab-btn" data-tab="soldiers">
-                <span>חיילים</span>
+                <i class="fa-solid fa-users tab-icon"></i><span>חיילים</span>
             </button>
             <button class="tab-btn" data-tab="constraints">
-                <span>אילוצים</span>
+                <i class="fa-solid fa-calendar-xmark tab-icon"></i><span>אילוצים</span>
             </button>
             <button class="tab-btn" data-tab="schedule">
-                <span>תזמון</span>
+                <i class="fa-solid fa-calendar-plus tab-icon"></i><span>תזמון</span>
             </button>
             <button class="tab-btn" data-tab="view">
-                <span>לוח זמנים</span>
+                <i class="fa-solid fa-table-cells tab-icon"></i><span>לוח זמנים</span>
             </button>
             <button class="tab-btn" data-tab="excel-stats">
-                <span>סטטיסטיקות מקובץ</span>
+                <i class="fa-solid fa-file-excel tab-icon"></i><span>סטטיסטיקות מקובץ</span>
             </button>
         </nav>
 
         <!-- Home Tab -->
         <div id="home" class="tab-content active">
             <div class="card home-card">
-                <h2>מה אפשר לעשות באתר?</h2>
+                <h2><i class="fa-solid fa-circle-info section-icon"></i> מה אפשר לעשות באתר?</h2>
                 <p class="home-intro">מערכת ניהול השמירות מאפשרת לבנות לוח שמירות אוטומטי לפי עמדות, חיילים ואילוצים. הנה כל האפשרויות:</p>
                 <div class="home-sections">
                     <section class="home-section">
-                        <h3>הגדרות</h3>
+                        <h3><i class="fa-solid fa-gear"></i> הגדרות</h3>
                         <p>להגדיר כמה שעות נמשכת כל שמירה (גלובלי לכל העמדות). ההגדרה משפיעה על חלוקת המשמרות לאורך היממה.</p>
                     </section>
                     <section class="home-section">
-                        <h3>עמדות</h3>
+                        <h3><i class="fa-solid fa-location-dot"></i> עמדות</h3>
                         <p>להוסיף עמדות שמירה (למשל ש.ג, אחורי, מנהלתי, מבצעי). לכל עמדה אפשר לסמן אם דורשת מפקד, ואם זו עמדת כוננות (ניתן לשבץ רצוף) או שמירה (צריך רווח בין שמירות).</p>
                     </section>
                     <section class="home-section">
-                        <h3>חיילים</h3>
+                        <h3><i class="fa-solid fa-users"></i> חיילים</h3>
                         <p>להוסיף חיילים לרשימה – אחד אחד או בהדבקת רשימה. אפשר לסמן חיילים כמפקדים. החיילים ישמשו לשיבוץ אוטומטי בכל העמדות.</p>
                     </section>
                     <section class="home-section">
-                        <h3>אילוצים</h3>
+                        <h3><i class="fa-solid fa-calendar-xmark"></i> אילוצים</h3>
                         <p>להגדיר לכל חייל: ימים אסורים, שעות אסורות לפי יום, טווחי שעות אסורים, ועמדות אסורות. האלגוריתם מכבד את כל האילוצים ומפזר שמירות ולילות באופן הוגן.</p>
                     </section>
                     <section class="home-section">
-                        <h3>תזמון</h3>
+                        <h3><i class="fa-solid fa-calendar-plus"></i> תזמון</h3>
                         <p>לבחור טווח תאריכים (התחלה וסיום) ולבקש לוח זמנים. אפשר להגדיר שעת התחלה של שמירה ראשונה ובקשות שיבוץ ספציפי (לשים חייל בתאריך/שעה מסוימת). לחיצה על "צור לוח" מפעילה את האלגוריתם ויוצרת את הרשימה.</p>
                     </section>
                     <section class="home-section">
-                        <h3>לוח זמנים</h3>
+                        <h3><i class="fa-solid fa-table-cells"></i> לוח זמנים</h3>
                         <p>לצפות בלוח שנוצר בטבלה: לפי שעות וימים, עם כל השיבוצים. אפשר לערוך שיבוץ בודד (החלפת חייל בשעה מסוימת), להחליף חייל בכל השמירות שלו, או להחליף בין שני חיילים. לחיצה על חייל מדגישה את כל ההופעות שלו. יש סטטיסטיקות לכל חייל וייצוא ל־CSV או Google Sheets.</p>
                     </section>
                     <section class="home-section">
-                        <h3>סטטיסטיקות מקובץ</h3>
+                        <h3><i class="fa-solid fa-file-excel"></i> סטטיסטיקות מקובץ</h3>
                         <p>להוריד תבנית אקסל ריקה בפורמט הנדרש, למלא אותה ברשימת שמירות (בפורמט מטריצה או רשימה), ולהעלות את הקובץ כדי לקבל סטטיסטיקות לכל חייל ובדיקת אילוצים.</p>
                     </section>
                 </div>
@@ -85,7 +116,7 @@
         <!-- Settings Tab -->
         <div id="settings" class="tab-content">
             <div class="card">
-                <h2>הגדרות כלליות</h2>
+                <h2><i class="fa-solid fa-gear card-icon"></i> הגדרות כלליות</h2>
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">מספר שעות לשמירה (גלובלי לכל העמדות)</span>
@@ -93,7 +124,7 @@
                     </label>
                 </div>
                 <button class="btn-primary" onclick="saveSettings()">
-                    <span>שמור הגדרות</span>
+                    <i class="fa-solid fa-floppy-disk btn-icon"></i><span>שמור הגדרות</span>
                 </button>
                 <div id="settingsStatus"></div>
             </div>
@@ -102,7 +133,7 @@
         <!-- Positions Tab -->
         <div id="positions" class="tab-content">
             <div class="card">
-                <h2>הגדרת עמדות</h2>
+                <h2><i class="fa-solid fa-location-dot card-icon"></i> הגדרת עמדות</h2>
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">שם העמדה</span>
@@ -124,7 +155,7 @@
                     <small class="input-hint">סמן אם זו עמדת כוננות - ניתן לשבץ רצוף. אם לא מסומן, זו עמדת שמירה שדורשת רווח בין שמירות</small>
                 </div>
                 <button class="btn-primary" onclick="addPosition()">
-                    <span>הוסף עמדה</span>
+                    <i class="fa-solid fa-plus btn-icon"></i><span>הוסף עמדה</span>
                 </button>
                 <div id="positionsList" class="list"></div>
             </div>
@@ -133,7 +164,7 @@
         <!-- Soldiers Tab -->
         <div id="soldiers" class="tab-content">
             <div class="card">
-                <h2>הוספת חיילים</h2>
+                <h2><i class="fa-solid fa-users card-icon"></i> הוספת חיילים</h2>
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">הוסף חיילים (אחד אחד או הדבק רשימה)</span>
@@ -159,10 +190,10 @@
                     </label>
                 </div>
                 <button class="btn-primary" onclick="addSoldier()">
-                    <span>הוסף חייל</span>
+                    <i class="fa-solid fa-user-plus btn-icon"></i><span>הוסף חייל</span>
                 </button>
                 <button class="btn-secondary" onclick="addMultipleSoldiers()" style="display: none;" id="addMultipleBtn">
-                    <span>הוסף את כל החיילים</span>
+                    <i class="fa-solid fa-users-line btn-icon"></i><span>הוסף את כל החיילים</span>
                 </button>
                 <div id="soldiersList" class="list"></div>
             </div>
@@ -171,7 +202,7 @@
         <!-- Constraints Tab -->
         <div id="constraints" class="tab-content">
             <div class="card">
-                <h2>הגדרת אילוצים</h2>
+                <h2><i class="fa-solid fa-calendar-xmark card-icon"></i> הגדרת אילוצים</h2>
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">בחר חייל</span>
@@ -189,7 +220,7 @@
                         <span class="label-text">טווחי שעות אסורות (ניתן להוסיף כמה טווחים)</span>
                         <div id="hourRangesContainer" class="hour-ranges-container" style="min-height: 50px; margin-bottom: 10px;"></div>
                         <button type="button" class="btn-secondary" onclick="addHourRange()" style="margin-top: 10px;">
-                            <span>➕ הוסף טווח שעות נוסף</span>
+                            <i class="fa-solid fa-plus btn-icon"></i><span>הוסף טווח שעות נוסף</span>
                         </button>
                         <small class="input-hint">הגדר שעות אסורות לפי טווחים. למשל: יום רביעי 20:00-00:00, יום חמישי 00:00-17:00. ניתן להוסיף כמה טווחים.</small>
                     </label>
@@ -202,10 +233,10 @@
                 </div>
                 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
                     <button class="btn-primary" onclick="saveConstraints()">
-                        <span>שמור אילוצים</span>
+                        <i class="fa-solid fa-floppy-disk btn-icon"></i><span>שמור אילוצים</span>
                     </button>
                     <button class="btn-delete" onclick="clearAllConstraints()" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);">
-                        <span>🗑️ מחק את כל האילוצים של כל החיילים</span>
+                        <i class="fa-solid fa-trash-can btn-icon"></i><span>מחק את כל האילוצים של כל החיילים</span>
                     </button>
                 </div>
                 <div id="constraintsList" class="list"></div>
@@ -215,7 +246,7 @@
         <!-- Schedule Tab -->
         <div id="schedule" class="tab-content">
             <div class="card">
-                <h2>יצירת לוח זמנים</h2>
+                <h2><i class="fa-solid fa-calendar-plus card-icon"></i> יצירת לוח זמנים</h2>
                 <div class="form-row">
                     <div class="form-group">
                         <label class="input-label">
@@ -254,7 +285,7 @@
                     </label>
                 </div>
                 <div class="info-box">
-                    <span class="info-icon">ℹ</span>
+                    <i class="fa-solid fa-circle-info info-icon"></i>
                     <span>השמירות רצופות לאורך כל היום והלילה (ללא פערים). אורך שמירה נקבע בהגדרות. שעת שמירה ראשונה קובעת מאיפה מתחילים (למשל 6 = שמירות מתחילות ב-6:00).</span>
                 </div>
                 <div class="form-group">
@@ -262,11 +293,11 @@
                     <small class="input-hint">בקש לשים חייל בשמירה בתאריך (אופציונלי: שעת התחלה של השמירה). האלגוריתם יתחשב ככל האפשר.</small>
                     <div id="shiftRequestsContainer" style="margin-top: 8px;"></div>
                     <button type="button" class="btn-secondary" onclick="addShiftRequestRow()" style="margin-top: 8px;">
-                        <span>+ הוסף בקשה</span>
+                        <i class="fa-solid fa-plus btn-icon"></i><span>הוסף בקשה</span>
                     </button>
                 </div>
                 <button class="btn-primary btn-large" onclick="generateSchedule()">
-                    <span>צור לוח זמנים</span>
+                    <i class="fa-solid fa-wand-magic-sparkles btn-icon"></i><span>צור לוח זמנים</span>
                 </button>
                 <div id="scheduleStatus"></div>
             </div>
@@ -276,13 +307,13 @@
         <div id="view" class="tab-content">
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">לוח זמנים</h2>
+                    <h2 style="margin: 0;"><i class="fa-solid fa-table-cells card-icon"></i> לוח זמנים</h2>
                     <div style="display: flex; gap: 10px;">
                         <button class="btn-secondary" id="undoBtn" onclick="undoLastChange()" style="display: none;">
-                            <span>ביטול שינוי אחרון</span>
+                            <i class="fa-solid fa-rotate-left btn-icon"></i><span>ביטול שינוי אחרון</span>
                         </button>
                         <button class="btn-secondary" id="editModeBtn" onclick="toggleEditMode()">
-                            <span>מצב עריכה</span>
+                            <i class="fa-solid fa-pen-to-square btn-icon"></i><span>מצב עריכה</span>
                         </button>
                     </div>
                 </div>
@@ -293,11 +324,11 @@
         <!-- סטטיסטיקות מקובץ אקסל -->
         <div id="excel-stats" class="tab-content">
             <div class="card">
-                <h2>סטטיסטיקות מקובץ אקסל</h2>
+                <h2><i class="fa-solid fa-file-excel card-icon"></i> סטטיסטיקות מקובץ אקסל</h2>
                 <p class="input-hint" style="margin-bottom: 16px;">העלה קובץ אקסל (.xlsx) עם שורות שמירות. שורה ראשונה = כותרות. עמודות: תאריך, שעת התחלה, שעת סיום, עמדה, חייל (או Date, Start, End, Position, Soldier). עמדה שמכילה "כוננות" תחשב ככוננות.</p>
                 <p style="margin-bottom: 12px;">
                     <button type="button" class="btn-secondary" onclick="downloadExcelTemplate()">
-                        <span>הורד קובץ שמירות ריק לפי הפורמט</span>
+                        <i class="fa-solid fa-download btn-icon"></i><span>הורד קובץ שמירות ריק לפי הפורמט</span>
                     </button>
                     <span class="input-hint" style="margin-right: 8px;">— תבנית עם הכותרות הנדרשות, מלא והעלה.</span>
                 </p>
@@ -308,7 +339,7 @@
                     </label>
                 </div>
                 <button class="btn-primary" onclick="uploadExcelAndShowStats()">
-                    <span>העלה וחשב סטטיסטיקות</span>
+                    <i class="fa-solid fa-upload btn-icon"></i><span>העלה וחשב סטטיסטיקות</span>
                 </button>
                 <div id="excelUploadStatus" style="margin-top: 12px;"></div>
                 <div id="excelStatsResult" class="schedule-stats" style="margin-top: 24px; display: none;"></div>
@@ -319,8 +350,8 @@
         <div id="editModal" class="modal" style="display: none;">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3 id="editModalTitle">עריכת שיבוץ</h3>
-                    <button class="modal-close" onclick="closeEditModal()">&times;</button>
+                    <h3 id="editModalTitle"><i class="fa-solid fa-pen-to-square"></i> עריכת שיבוץ</h3>
+                    <button class="modal-close" onclick="closeEditModal()" aria-label="סגור"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div class="modal-body">
                     <div id="editModalContent"></div>
