@@ -54,6 +54,8 @@ function setupTabs() {
                 loadSettings();
             } else if (targetTab === 'saved') {
                 loadSavedSchedules();
+            } else if (targetTab === 'excel-stats') {
+                // סטטיסטיקות מקובץ – אין טעינה אוטומטית
             }
         });
     });
@@ -1155,6 +1157,64 @@ async function saveConstraints() {
     }
 }
 
+// Shift requests (בקשות לשיבוץ ספציפי)
+function addShiftRequestRow() {
+    const container = document.getElementById('shiftRequestsContainer');
+    if (!container) return;
+    const row = document.createElement('div');
+    row.className = 'shift-request-row';
+    row.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-bottom: 6px; flex-wrap: wrap;';
+    const select = document.createElement('select');
+    select.className = 'modern-input';
+    select.style.minWidth = '120px';
+    select.innerHTML = '<option value="">בחר חייל</option>';
+    soldiers.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        select.appendChild(opt);
+    });
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.className = 'modern-input';
+    dateInput.placeholder = 'תאריך';
+    const hourInput = document.createElement('input');
+    hourInput.type = 'number';
+    hourInput.min = 0;
+    hourInput.max = 23;
+    hourInput.placeholder = 'שעה (ריק=כל משמרת)';
+    hourInput.className = 'modern-input';
+    hourInput.style.width = '100px';
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-secondary';
+    removeBtn.textContent = 'הסר';
+    removeBtn.onclick = () => row.remove();
+    row.appendChild(select);
+    row.appendChild(dateInput);
+    row.appendChild(hourInput);
+    row.appendChild(removeBtn);
+    container.appendChild(row);
+}
+
+function collectShiftRequests() {
+    const rows = document.querySelectorAll('#shiftRequestsContainer .shift-request-row');
+    const list = [];
+    rows.forEach(row => {
+        const select = row.querySelector('select');
+        const dateInput = row.querySelector('input[type="date"]');
+        const hourInput = row.querySelector('input[type="number"]');
+        const soldierId = select?.value?.trim();
+        const date = dateInput?.value?.trim();
+        if (!soldierId || !date) return;
+        const hourVal = hourInput?.value?.trim();
+        const startHour = hourVal === '' ? null : parseInt(hourVal, 10);
+        if (startHour !== null && (startHour < 0 || startHour > 23)) return;
+        list.push({ soldierId, date, startHour: startHour ?? undefined });
+    });
+    return list;
+}
+
 // Schedule Generation
 async function generateSchedule() {
     const startDate = document.getElementById('startDate').value;
@@ -1207,12 +1267,14 @@ async function generateSchedule() {
         return;
     }
 
+    const shiftRequests = collectShiftRequests();
     const requestData = { 
         startDate, 
         endDate,
         startHour: startHour,
         endHour: endHour,
-        firstShiftStartHour: firstShiftStartHour
+        firstShiftStartHour: firstShiftStartHour,
+        shiftRequests: shiftRequests.length ? shiftRequests : undefined
     };
     
     console.log('=== יצירת לוח זמנים - התחלה ===');
@@ -1457,7 +1519,7 @@ function displaySchedule() {
     statsHTML += '<div class="stats-grid">';
     
     allSoldiers.forEach(soldier => {
-        const stats = soldierStats[soldier.id] || { totalShifts: 0, guardShifts: 0, avgGap: 0, maxGap: 0 };
+        const stats = soldierStats[soldier.id] || { totalShifts: 0, guardShifts: 0, nightGuardShifts: 0, avgGap: 0, minGap: 0, maxGap: 0 };
         const color = soldierColors[soldier.id];
         
         statsHTML += `
@@ -1466,16 +1528,20 @@ function displaySchedule() {
                     ${soldier.name}
                 </div>
                 <div class="stat-details">
-                    <div>סה"כ משמרות: <strong>${stats.totalShifts}</strong></div>
                     <div>שמירות: <strong>${stats.guardShifts || 0}</strong></div>
-                    <div>רווח ממוצע: <strong>${stats.avgGap.toFixed(1)}</strong> שעות</div>
+                    <div>שמירות לילה: <strong>${stats.nightGuardShifts || 0}</strong></div>
+                    <div>רווח מינימלי: <strong>${(stats.minGap ?? 0).toFixed(1)}</strong> שעות</div>
                     <div>רווח מקסימלי: <strong>${stats.maxGap}</strong> שעות</div>
                 </div>
             </div>
         `;
     });
     
+    statsHTML += '<div id="scheduleConstraintsBlock" class="constraints-result"></div>';
     statsHTML += '</div></div>';
+    
+    // טוען בדיקת אילוצים מהשרת
+    loadScheduleConstraintsReport();
     
     // Group schedule by date and shift
     const scheduleByDateAndShift = {};
@@ -1620,9 +1686,14 @@ function calculateSoldierStats(schedule, allSoldiers) {
         
         // Collect all shifts for this soldier
         let guardShiftsCount = 0; // ספירת שמירות בלבד (לא כוננות)
+        let nightGuardShiftsCount = 0; // שמירות לילה (21:00–06:00)
         
         schedule.forEach(item => {
             const assignments = item.assignments || item.Assignments || [];
+            const shiftStart = new Date(item.start || item.Start);
+            const startHour = shiftStart.getHours();
+            const isNightShift = startHour >= 21 || startHour < 6;
+            
             assignments.forEach(assignment => {
                 if (!assignment) return;
                 const soldierId = assignment.soldierId || assignment.SoldierId;
@@ -1632,6 +1703,7 @@ function calculateSoldierStats(schedule, allSoldiers) {
                     const position = positions.find(p => p.id === positionId);
                     if (position && !position.isStandby) {
                         guardShiftsCount++;
+                        if (isNightShift) nightGuardShiftsCount++;
                     }
                     
                     soldierShifts.push({
@@ -1652,7 +1724,9 @@ function calculateSoldierStats(schedule, allSoldiers) {
             stats[soldier.id] = {
                 totalShifts: 0,
                 guardShifts: 0,
+                nightGuardShifts: 0,
                 avgGap: 0,
+                minGap: 0,
                 maxGap: 0
             };
             return;
@@ -1681,12 +1755,15 @@ function calculateSoldierStats(schedule, allSoldiers) {
         }
         
         const avgGap = gaps.length > 0 ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+        const minGap = gaps.length > 0 ? Math.min(...gaps) : 0;
         const maxGap = gaps.length > 0 ? Math.max(...gaps) : 0;
         
         stats[soldier.id] = {
             totalShifts: soldierShifts.length,
             guardShifts: guardShiftsCount, // מספר שמירות בלבד
+            nightGuardShifts: nightGuardShiftsCount, // שמירות לילה (21:00–06:00)
             avgGap: avgGap,
+            minGap: minGap,
             maxGap: Math.round(maxGap)
         };
     });
@@ -2670,7 +2747,7 @@ function exportToCSV() {
         
         // Add statistics section
         csvContent += '\nסטטיסטיקות חיילים\n';
-        csvContent += 'שם חייל,סה"כ משמרות,שמירות,רווח ממוצע (שעות),רווח מקסימלי (שעות)\n';
+        csvContent += 'שם חייל,סה"כ משמרות,שמירות,שמירות לילה,רווח ממוצע (שעות),רווח מינימלי (שעות),רווח מקסימלי (שעות)\n';
         
         const allSoldiers = Array.from(new Set(
             schedule.flatMap(item => {
@@ -2687,8 +2764,8 @@ function exportToCSV() {
         
         const soldierStats = calculateSoldierStats(schedule, allSoldiers);
         allSoldiers.forEach(soldier => {
-            const stats = soldierStats[soldier.id] || { totalShifts: 0, guardShifts: 0, avgGap: 0, maxGap: 0 };
-            csvContent += `${soldier.name},${stats.totalShifts},${stats.guardShifts || 0},${stats.avgGap.toFixed(1)},${stats.maxGap}\n`;
+            const stats = soldierStats[soldier.id] || { totalShifts: 0, guardShifts: 0, nightGuardShifts: 0, avgGap: 0, minGap: 0, maxGap: 0 };
+            csvContent += `${soldier.name},${stats.totalShifts},${stats.guardShifts || 0},${stats.nightGuardShifts || 0},${stats.avgGap.toFixed(1)},${(stats.minGap ?? 0).toFixed(1)},${stats.maxGap}\n`;
         });
         
         // Create download link
@@ -2874,4 +2951,125 @@ async function exportToGoogleSheets() {
         console.error('Error exporting to Google Sheets:', error);
         showNotification('שגיאה בייצוא ל-Google Sheets', 'error');
     }
+}
+
+// העלאת אקסל וחישוב סטטיסטיקות לכל חייל
+async function uploadExcelAndShowStats() {
+    const fileInput = document.getElementById('excelFileInput');
+    const statusEl = document.getElementById('excelUploadStatus');
+    const resultEl = document.getElementById('excelStatsResult');
+
+    if (!fileInput || !fileInput.files || !fileInput.files.length) {
+        statusEl.textContent = 'נא לבחור קובץ אקסל.';
+        statusEl.style.color = '#c00';
+        resultEl.style.display = 'none';
+        return;
+    }
+
+    const file = fileInput.files[0];
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        statusEl.textContent = 'הקובץ חייב להיות אקסל (.xlsx).';
+        statusEl.style.color = '#c00';
+        resultEl.style.display = 'none';
+        return;
+    }
+
+    statusEl.textContent = 'מעלה ומחשב...';
+    statusEl.style.color = '#666';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch(API_BASE + '/ScheduleExcel/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ message: res.statusText }));
+            throw new Error(err.message || 'שגיאה בשרת');
+        }
+
+        const report = await res.json();
+        statusEl.textContent = 'הסטטיסטיקות חושבו.';
+        statusEl.style.color = '#0a0';
+
+        const stats = report.perSoldierStats || report.PerSoldierStats || [];
+        if (!stats.length) {
+            resultEl.innerHTML = '<p>לא נמצאו שורות משמרות בקובץ (או שעמודות הכותרות לא זוהו).</p>';
+            resultEl.style.display = 'block';
+            return;
+        }
+
+        let html = '<h3>סטטיסטיקות חיילים</h3><div class="stats-grid">';
+        const colors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#65a30d', '#ca8a04'];
+        stats.forEach((s, i) => {
+            const color = colors[i % colors.length];
+            const min = s.minGapHours != null ? s.minGapHours.toFixed(1) : '–';
+            const max = s.maxGapHours != null ? s.maxGapHours.toFixed(1) : '–';
+            html += `
+                <div class="stat-card" style="border-right: 4px solid ${color};">
+                    <div class="stat-soldier-name" style="color: ${color}; font-weight: 600;">
+                        ${escapeHtml(s.soldierName || s.SoldierName || '')}
+                    </div>
+                    <div class="stat-details">
+                        <div>שמירות: <strong>${s.guardCount ?? s.GuardCount ?? 0}</strong></div>
+                        <div>שמירות לילה: <strong>${s.nightGuardCount ?? s.NightGuardCount ?? 0}</strong></div>
+                        <div>רווח מינימלי: <strong>${min}</strong> שעות</div>
+                        <div>רווח מקסימלי: <strong>${max}</strong> שעות</div>
+                    </div>
+                </div>
+            `;
+        });
+        // הצגת תוצאת אילוצים (אם נבדק)
+        const valid = report.hardConstraintsValid;
+        const violations = report.hardConstraintViolations || report.HardConstraintViolations || [];
+        if (valid !== undefined && valid !== null) {
+            if (valid) {
+                html += '<p class="constraints-ok" style="margin-top:1em;color:#059669;font-weight:600;">✓ כל האילוצים מתקיימים.</p>';
+            } else {
+                html += '<p class="constraints-fail" style="margin-top:1em;color:#dc2626;font-weight:600;">יש הפרות אילוצים:</p><ul style="margin:0.5em 0 0 1.2em;color:#374151;">';
+                violations.forEach(v => { html += '<li>' + escapeHtml(v) + '</li>'; });
+                html += '</ul>';
+            }
+        }
+        html += '</div>';
+        resultEl.innerHTML = html;
+        resultEl.style.display = 'block';
+    } catch (err) {
+        statusEl.textContent = 'שגיאה: ' + (err.message || 'לא ניתן לטעון את הקובץ.');
+        statusEl.style.color = '#c00';
+        resultEl.style.display = 'none';
+    }
+}
+
+async function loadScheduleConstraintsReport() {
+    const block = document.getElementById('scheduleConstraintsBlock');
+    if (!block) return;
+    try {
+        const res = await fetch(API_BASE + '/schedule/validation-report');
+        if (!res.ok) return;
+        const report = await res.json();
+        const valid = report.hardConstraintsValid;
+        const violations = report.hardConstraintViolations || report.HardConstraintViolations || [];
+        if (valid === undefined || valid === null) {
+            block.innerHTML = '';
+            return;
+        }
+        if (valid) {
+            block.innerHTML = '<p class="constraints-ok" style="margin:0.5em 0 0;color:#059669;font-weight:600;">✓ כל האילוצים מתקיימים.</p>';
+        } else {
+            block.innerHTML = '<p class="constraints-fail" style="margin:0.5em 0 0;color:#dc2626;font-weight:600;">יש הפרות אילוצים:</p><ul style="margin:0.5em 0 0 1.2em;color:#374151;">' +
+                violations.map(v => '<li>' + escapeHtml(v) + '</li>').join('') + '</ul>';
+        }
+    } catch (_) {
+        block.innerHTML = '';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }

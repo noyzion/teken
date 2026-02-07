@@ -22,6 +22,29 @@ public class ScheduleController : ControllerBase
         return Ok(_currentSchedule);
     }
 
+    /// <summary>דוח בדיקות סופיות לפני סגירה – מי עם הכי מעט/הרבה שמירות, הרווח הכי קצר/ארוך (סעיף 7) + בדיקת אילוצים קשיחים.</summary>
+    [HttpGet("validation-report")]
+    public async Task<ActionResult<ScheduleValidationReport>> GetValidationReport()
+    {
+        if (_currentSchedule == null || !_currentSchedule.Any())
+            return Ok(new ScheduleValidationReport());
+        var report = await _schedulerService.GetScheduleValidationReportAsync(_currentSchedule);
+        var constraintsResult = await _schedulerService.ValidateScheduleHardConstraintsAsync(_currentSchedule);
+        report.HardConstraintsValid = constraintsResult.IsValid;
+        report.HardConstraintViolations = constraintsResult.Violations ?? new List<string>();
+        return Ok(report);
+    }
+
+    /// <summary>בדיקת אילוצים קשיחים (סעיף 1) – אם יש הפרות, הרשימה לא תקינה. לפני פרסום.</summary>
+    [HttpGet("validate-hard-constraints")]
+    public async Task<ActionResult<ScheduleHardConstraintsValidationResult>> ValidateHardConstraints()
+    {
+        if (_currentSchedule == null || !_currentSchedule.Any())
+            return Ok(new ScheduleHardConstraintsValidationResult { IsValid = true });
+        var result = await _schedulerService.ValidateScheduleHardConstraintsAsync(_currentSchedule);
+        return Ok(result);
+    }
+
     [HttpPost("generate")]
     public async Task<ActionResult<List<DaySchedule>>> Generate([FromBody] ScheduleConfig config)
     {

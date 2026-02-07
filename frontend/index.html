@@ -38,6 +38,9 @@
             <button class="tab-btn" data-tab="saved">
                 <span>לוחות שמורים</span>
             </button>
+            <button class="tab-btn" data-tab="excel-stats">
+                <span>סטטיסטיקות מקובץ</span>
+            </button>
         </nav>
 
         <!-- Settings Tab -->
@@ -215,6 +218,14 @@
                     <span class="info-icon">ℹ</span>
                     <span>המשמרות רצופות לאורך כל היום והלילה (ללא פערים). אורך משמרת נקבע בהגדרות. שעת משמרת ראשונה קובעת מאיפה מתחילים (למשל 6 = משמרות מתחילות ב-6:00).</span>
                 </div>
+                <div class="form-group">
+                    <span class="label-text">בקשות לשיבוץ ספציפי</span>
+                    <small class="input-hint">בקש לשים חייל במשמרת בתאריך (אופציונלי: שעת התחלה של המשמרת). האלגוריתם יתחשב ככל האפשר.</small>
+                    <div id="shiftRequestsContainer" style="margin-top: 8px;"></div>
+                    <button type="button" class="btn-secondary" onclick="addShiftRequestRow()" style="margin-top: 8px;">
+                        <span>+ הוסף בקשה</span>
+                    </button>
+                </div>
                 <button class="btn-primary btn-large" onclick="generateSchedule()">
                     <span>צור לוח זמנים</span>
                 </button>
@@ -291,6 +302,25 @@
                     </div>
                     <div id="sharedSchedulesList" class="list"></div>
                 </div>
+            </div>
+        </div>
+
+        <!-- סטטיסטיקות מקובץ אקסל -->
+        <div id="excel-stats" class="tab-content">
+            <div class="card">
+                <h2>סטטיסטיקות מקובץ אקסל</h2>
+                <p class="input-hint" style="margin-bottom: 16px;">העלה קובץ אקסל (.xlsx) עם שורות משמרות. שורה ראשונה = כותרות. עמודות: תאריך, שעת התחלה, שעת סיום, עמדה, חייל (או Date, Start, End, Position, Soldier). עמדה שמכילה "כוננות" תחשב ככוננות.</p>
+                <div class="form-group">
+                    <label class="input-label">
+                        <span class="label-text">קובץ אקסל</span>
+                        <input type="file" id="excelFileInput" accept=".xlsx" class="modern-input">
+                    </label>
+                </div>
+                <button class="btn-primary" onclick="uploadExcelAndShowStats()">
+                    <span>העלה וחשב סטטיסטיקות</span>
+                </button>
+                <div id="excelUploadStatus" style="margin-top: 12px;"></div>
+                <div id="excelStatsResult" class="schedule-stats" style="margin-top: 24px; display: none;"></div>
             </div>
         </div>
 

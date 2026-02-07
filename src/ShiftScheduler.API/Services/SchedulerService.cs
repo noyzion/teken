@@ -45,6 +45,13 @@ public class SchedulerService : ISchedulerService
             soldierAssignments[soldier.Id] = new List<SoldierAssignment>();
         }
 
+        // כמה פעמים שובץ כל חייל ב־fallback (relaxGap) – למניעת "קורבן קבוע"
+        var relaxCountBySoldier = new Dictionary<string, int>();
+
+        // לכל חייל: מינימום שמירות = מספר הימים הזמינים (לפחות שמירה אחת ביום) – בונוס בציון, לא סינון
+        var availableDaysPerSoldier = GetAvailableDaysPerSoldier(soldiers, config.StartDate, config.EndDate);
+        var soldiersWithFewerAvailableDays = GetSoldiersWithFewerAvailableDaysFromDict(availableDaysPerSoldier);
+
         // Generate time slots with continuous coverage (no gaps)
         // Number of shifts per day = ceil(available hours / shift length) so every hour is covered
         Console.WriteLine($"מייצר time slots: {settings.ShiftHours} שעות למשמרת, כיסוי רצוף (ללא פערים)");
@@ -66,6 +73,18 @@ public class SchedulerService : ISchedulerService
                 Assignments = new List<ShiftAssignment>()
             };
 
+            // בקשת שיבוץ ספציפי: האם יש בקשה לשים חייל מסוים במשמרת הזו?
+            string? preferredSoldierId = null;
+            if (config.ShiftRequests != null && config.ShiftRequests.Any())
+            {
+                var slotDateStr = slot.Date.ToString("yyyy-MM-dd");
+                var slotStartHour = slot.Start.Hour;
+                var match = config.ShiftRequests.FirstOrDefault(r =>
+                    r.Date == slotDateStr && (r.StartHour == null || r.StartHour == slotStartHour));
+                if (match != null)
+                    preferredSoldierId = match.SoldierId;
+            }
+
             // Find soldiers who finished guard shifts in the previous slot
             List<string> currentGuardSoldiers = new List<string>();
             
@@ -79,50 +98,50 @@ public class SchedulerService : ISchedulerService
                     soldiers,
                     position,
                     slot,
-                    soldierAssignments
+                    soldierAssignments,
+                    soldiersWithFewerAvailableDays
                 );
 
                 Soldier? assignedSoldier = null;
-                
+                var cameFromFallback = false;
+
                 if (availableSoldiers.Any())
                 {
+                    // מינימום שמירה ביום זמין – בונוס בציון בלבד (לא סינון), כדי לא לשבור גאפ אידיאלי
                     assignedSoldier = SelectBestSoldier(
                         availableSoldiers,
                         position,
                         slot,
                         soldierAssignments,
+                        preferredSoldierId,
                         previousSlot,
-                        previousGuardSoldiers
+                        previousGuardSoldiers,
+                        soldiersWithFewerAvailableDays,
+                        availableDaysPerSoldier,
+                        relaxCountBySoldier
                     );
                 }
                 else
                 {
-                    // No available soldiers - find the best soldier anyway (ignore constraints)
-                    // Filter only by commander requirement and groups
-                    var fallbackSoldiers = soldiers.Where(soldier =>
-                    {
-                        // Check if position requires commander and soldier is not a commander
-                        if (position.RequiresCommander && !soldier.IsCommander)
-                            return false;
-
-
-                        // Check if already assigned in this time slot
-                        var existingAssignment = soldierAssignments[soldier.Id].FirstOrDefault(
-                            a => a.Date.Date == slot.Date.Date && a.ShiftNumber == slot.ShiftNumber);
-
-                        return existingAssignment == null;
-                    }).ToList();
-                    
+                    // Fallback: מרככים רק גאפ (relaxGap), שומרים על ימים/שעות/עמדות אסורות
+                    var fallbackSoldiers = GetAvailableSoldiers(soldiers, position, slot, soldierAssignments, soldiersWithFewerAvailableDays, relaxGap: true);
                     if (fallbackSoldiers.Any())
                     {
+                        cameFromFallback = true;
                         assignedSoldier = SelectBestSoldier(
                             fallbackSoldiers,
                             position,
                             slot,
                             soldierAssignments,
+                            preferredSoldierId,
                             previousSlot,
-                            previousGuardSoldiers
+                            previousGuardSoldiers,
+                            soldiersWithFewerAvailableDays,
+                            availableDaysPerSoldier,
+                            relaxCountBySoldier
                         );
+                        if (assignedSoldier != null)
+                            relaxCountBySoldier[assignedSoldier.Id] = relaxCountBySoldier.GetValueOrDefault(assignedSoldier.Id, 0) + 1;
                     }
                 }
 
@@ -133,7 +152,8 @@ public class SchedulerService : ISchedulerService
                         PositionId = position.Id,
                         PositionName = position.Name,
                         SoldierId = assignedSoldier.Id,
-                        SoldierName = assignedSoldier.Name
+                        SoldierName = assignedSoldier.Name,
+                        IsForced = cameFromFallback
                     });
 
                     soldierAssignments[assignedSoldier.Id].Add(new SoldierAssignment
@@ -151,19 +171,21 @@ public class SchedulerService : ISchedulerService
                 }
             }
             
-            // Now assign standby positions (כוננות) - prioritize soldiers who finished guard shifts in previous slot
-            // Group them by 4 and assign to standby positions
+            // Now assign standby positions (כוננות) - prioritize soldiers who finished guard in previous slot, רק אם לא עמוסים מדי
             var soldiersFromPreviousGuardForStandby = new List<Soldier>();
             if (previousGuardSoldiers != null && previousGuardSoldiers.Any() && standbyPositions.Any())
             {
+                var averageAssignments = soldierAssignments.Values.Average(v => v.Count);
                 var testPosition = standbyPositions.First();
                 soldiersFromPreviousGuardForStandby = soldiers
                     .Where(s => previousGuardSoldiers.Contains(s.Id))
+                    .Where(s => soldierAssignments[s.Id].Count <= averageAssignments + 1) // לא לתת כוננות למי שכבר עמוס מאוד
                     .Where(s => GetAvailableSoldiers(
                         new List<Soldier> { s },
                         testPosition,
                         slot,
-                        soldierAssignments
+                        soldierAssignments,
+                        soldiersWithFewerAvailableDays
                     ).Any())
                     .ToList();
             }
@@ -184,14 +206,15 @@ public class SchedulerService : ISchedulerService
                     soldiers,
                     position,
                     slot,
-                    soldierAssignments
+                    soldierAssignments,
+                    soldiersWithFewerAvailableDays
                 );
 
                 Soldier? assignedSoldier = null;
-                
+                var standbyCameFromFallback = false;
+
                 if (availableSoldiers.Any())
                 {
-                    
                     // First priority: assign soldiers from previous guard shift in groups of 4
                     if (currentGuardGroupIndex < guardGroups.Count && guardGroups.Count > 0)
                     {
@@ -241,39 +264,35 @@ public class SchedulerService : ISchedulerService
                             position,
                             slot,
                             soldierAssignments,
+                            preferredSoldierId,
                             previousSlot,
-                            previousGuardSoldiers
+                            previousGuardSoldiers,
+                            soldiersWithFewerAvailableDays,
+                            availableDaysPerSoldier,
+                            relaxCountBySoldier
                         );
                     }
                 }
                 else
                 {
-                    // No available soldiers - find the best soldier anyway (ignore constraints)
-                    // Filter only by commander requirement and groups
-                    var fallbackSoldiers = soldiers.Where(soldier =>
-                    {
-                        // Check if position requires commander and soldier is not a commander
-                        if (position.RequiresCommander && !soldier.IsCommander)
-                            return false;
-
-
-                        // Check if already assigned in this time slot
-                        var existingAssignment = soldierAssignments[soldier.Id].FirstOrDefault(
-                            a => a.Date.Date == slot.Date.Date && a.ShiftNumber == slot.ShiftNumber);
-
-                        return existingAssignment == null;
-                    }).ToList();
-                    
+                    var fallbackSoldiers = GetAvailableSoldiers(soldiers, position, slot, soldierAssignments, soldiersWithFewerAvailableDays, relaxGap: true);
                     if (fallbackSoldiers.Any())
                     {
+                        standbyCameFromFallback = true;
                         assignedSoldier = SelectBestSoldier(
                             fallbackSoldiers,
                             position,
                             slot,
                             soldierAssignments,
+                            preferredSoldierId,
                             previousSlot,
-                            previousGuardSoldiers
+                            previousGuardSoldiers,
+                            soldiersWithFewerAvailableDays,
+                            availableDaysPerSoldier,
+                            relaxCountBySoldier
                         );
+                        if (assignedSoldier != null)
+                            relaxCountBySoldier[assignedSoldier.Id] = relaxCountBySoldier.GetValueOrDefault(assignedSoldier.Id, 0) + 1;
                     }
                 }
 
@@ -284,7 +303,8 @@ public class SchedulerService : ISchedulerService
                         PositionId = position.Id,
                         PositionName = position.Name,
                         SoldierId = assignedSoldier.Id,
-                        SoldierName = assignedSoldier.Name
+                        SoldierName = assignedSoldier.Name,
+                        IsForced = standbyCameFromFallback
                     });
 
                     soldierAssignments[assignedSoldier.Id].Add(new SoldierAssignment
@@ -396,22 +416,66 @@ public class SchedulerService : ISchedulerService
         return timeSlots;
     }
 
+    /// <summary>
+    /// לכל חייל: מספר הימים הזמינים (ימים שבהם אין אילוץ יום אסור).
+    /// משמש למינימום שמירות: לכל חייל לפחות שמירה אחת ביום זמין.
+    /// </summary>
+    private static Dictionary<string, int> GetAvailableDaysPerSoldier(List<Soldier> soldiers, DateTime startDate, DateTime endDate)
+    {
+        var result = new Dictionary<string, int>();
+        foreach (var soldier in soldiers)
+        {
+            int count = 0;
+            for (var d = startDate.Date; d <= endDate.Date; d = d.AddDays(1))
+            {
+                var dayOfWeek = (int)d.DayOfWeek;
+                if (soldier.Constraints?.ForbiddenDaysOfWeek == null || !soldier.Constraints.ForbiddenDaysOfWeek.Any())
+                    count++;
+                else if (!soldier.Constraints.ForbiddenDaysOfWeek.Contains(dayOfWeek))
+                    count++;
+            }
+            result[soldier.Id] = count;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// מזהי חיילים שנמצאים פחות ימים מכולם – נאפשר להם רווח קטן יותר בין שמירות.
+    /// </summary>
+    private static HashSet<string> GetSoldiersWithFewerAvailableDaysFromDict(Dictionary<string, int> availableDaysPerSoldier)
+    {
+        var result = new HashSet<string>();
+        if (availableDaysPerSoldier.Count == 0) return result;
+        var maxDays = availableDaysPerSoldier.Values.Max();
+        foreach (var kv in availableDaysPerSoldier)
+            if (kv.Value < maxDays)
+                result.Add(kv.Key);
+        return result;
+    }
+
+    /// <summary>
+    /// זמינים לשיבוץ: אילוצים קשיחים (סעיף 1) – לעולם לא מפרים.
+    /// א. זמינות: ימים/שעות/טווחים אסורים, טווחים חוצי ימים. ב. עמדות: עמדות אסורות, מפקד. ג. לא באותו סלוט פעמיים. חפיפות: אין חפיפה.
+    /// רווח מינימלי (סעיף 2.א) – אלא אם relaxGap (fallback, סעיף 5: כמעט אף פעם לא).
+    /// </summary>
     private List<Soldier> GetAvailableSoldiers(
         List<Soldier> soldiers,
         Position position,
         TimeSlot slot,
-        Dictionary<string, List<SoldierAssignment>> soldierAssignments)
+        Dictionary<string, List<SoldierAssignment>> soldierAssignments,
+        HashSet<string>? soldiersWithFewerAvailableDays = null,
+        bool relaxGap = false)
     {
         var shiftStartHour = slot.Start.Hour;
         var shiftEndHour = slot.End.Hour;
 
         return soldiers.Where(soldier =>
         {
-            // Check if position requires commander and soldier is not a commander
+            // 1.ב דרישות עמדה – מפקד
             if (position.RequiresCommander && !soldier.IsCommander)
                 return false;
 
-            // Check constraints
+            // 1.א 1.ב אילוצים – ימים/שעות/עמדות אסורות
             if (soldier.Constraints != null)
             {
                 var dayOfWeek = (int)slot.Date.DayOfWeek; // C# DayOfWeek: Sunday=0, Monday=1, ..., Saturday=6
@@ -517,64 +581,71 @@ public class SchedulerService : ISchedulerService
                     return false;
             }
 
-            // Check if already assigned in this time slot
+            // 1.א חייל לא בשתי עמדות באותו סלוט
             var existingAssignment = soldierAssignments[soldier.Id].FirstOrDefault(
                 a => a.Date.Date == slot.Date.Date && a.ShiftNumber == slot.ShiftNumber);
 
             if (existingAssignment != null)
                 return false;
 
-            // Check gap requirements based on position type
+            // 1.ג חפיפות + 2.א 2.ב 2.ג רווח מינימלי/רצוי/מניעת קיצוניות (אלא אם relaxGap – fallback בלבד)
             var assignments = soldierAssignments[soldier.Id];
             if (assignments.Any())
             {
                 if (!position.IsStandby)
                 {
-                    // For guard positions (שמירה) - need significant gap between guard shifts
-                    var minGapHours = 8.0; // Minimum 8 hours between guard shifts
-                    
-                    // Check all guard shifts (not standby) for conflicts
+                    // For guard positions (שמירה) - gap between guard shifts. Hard 12h, normal 15h; הקלה רק בין 15 ל־12 (לא ל־4).
+                    var hasManyConstraints = HasManyConstraints(soldier);
+                    var hasFewerAvailableDays = soldiersWithFewerAvailableDays != null && soldiersWithFewerAvailableDays.Contains(soldier.Id);
+                    var useSmallerGap = hasManyConstraints || hasFewerAvailableDays;
+                    var hardMinGapHours = 12.0;   // מינימום מוחלט – אין 9/12
+                    var normalMinGapHours = 15.0; // מועדף; עם אילוצים מותר 12–15
+
                     foreach (var guardShift in assignments.Where(a => !a.IsStandbyPosition))
                     {
-                        // Check if shifts overlap
                         if (slot.Start < guardShift.ShiftEnd && slot.End > guardShift.ShiftStart)
                             return false; // Shifts overlap
-                        
-                        // Check gap before current shift (guard shift ended, current shift starts)
+
+                        if (relaxGap)
+                            continue; // Fallback: רק מרככים גאפ, שומרים על כל שאר האילוצים
+
                         if (guardShift.ShiftEnd <= slot.Start)
                         {
                             var gapBefore = (slot.Start - guardShift.ShiftEnd).TotalHours;
-                            if (gapBefore < minGapHours)
-                                return false; // Too close to previous guard shift
+                            if (gapBefore < hardMinGapHours)
+                                return false;
+                            if (!useSmallerGap && gapBefore < normalMinGapHours)
+                                return false;
                         }
-                        
-                        // Check gap after current shift (current shift ends, guard shift starts)
+
                         if (slot.End <= guardShift.ShiftStart)
                         {
                             var gapAfter = (guardShift.ShiftStart - slot.End).TotalHours;
-                            if (gapAfter < minGapHours)
-                                return false; // Too close to next guard shift
+                            if (gapAfter < hardMinGapHours)
+                                return false;
+                            if (!useSmallerGap && gapAfter < normalMinGapHours)
+                                return false;
                         }
                     }
                 }
                 else
                 {
-                    // For standby positions (כוננות) - can be continuous after guard shift, but prefer gap between standby shifts
-                    // Allow continuous assignment if soldier just finished a guard shift
-                    var justFinishedGuardShift = assignments
-                        .Where(a => !a.IsStandbyPosition)
-                        .Any(a => Math.Abs((slot.Start - a.ShiftEnd).TotalHours) < 1.0); // Within 1 hour = continuous
-                    
-                    if (!justFinishedGuardShift)
+                    if (!relaxGap)
                     {
-                        // If not continuous from guard shift, check gap between standby shifts
-                        var minStandbyGapHours = 4.0; // Minimum 4 hours between standby shifts
-                        var conflictingStandbyShift = assignments.FirstOrDefault(a => a.IsStandbyPosition &&
-                            ((slot.Start - a.ShiftEnd).TotalHours >= 0 && (slot.Start - a.ShiftEnd).TotalHours < minStandbyGapHours) ||
-                            ((a.ShiftStart - slot.End).TotalHours >= 0 && (a.ShiftStart - slot.End).TotalHours < minStandbyGapHours));
+                        var justFinishedGuardShift = assignments
+                            .Where(a => !a.IsStandbyPosition)
+                            .Any(a => Math.Abs((slot.Start - a.ShiftEnd).TotalHours) < 1.0);
 
-                        if (conflictingStandbyShift != null)
-                            return false; // Too close to another standby shift
+                        if (!justFinishedGuardShift)
+                        {
+                            var minStandbyGapHours = 4.0;
+                            var conflictingStandbyShift = assignments.FirstOrDefault(a => a.IsStandbyPosition &&
+                                (((slot.Start - a.ShiftEnd).TotalHours >= 0 && (slot.Start - a.ShiftEnd).TotalHours < minStandbyGapHours) ||
+                                 ((a.ShiftStart - slot.End).TotalHours >= 0 && (a.ShiftStart - slot.End).TotalHours < minStandbyGapHours)));
+
+                            if (conflictingStandbyShift != null)
+                                return false;
+                        }
                     }
                 }
             }
@@ -583,20 +654,124 @@ public class SchedulerService : ISchedulerService
         }).ToList();
     }
 
+    /// <summary>
+    /// ציון גאפ לשמירה: קנס רציף על גאפ קצר, בונוס ל"נשכח" (מניעת 40+), בונוס למי שכבר נפגע.
+    /// </summary>
+    private static double ComputeGuardGapScore(double hoursSinceLastGuardShift, double minGapBetweenGuardShifts, double preferredForSlot)
+    {
+        const double idealGapHours = 18.0;
+        const double longGapSoftHours = 24.0;   // מתחת ל־24: בונוס קל; מעל 36: בונוס חזק (מניעת 42h)
+        const double longGapStrongHours = 36.0;
+        const double alreadyHurtThreshold = 12.0;
+
+        double score = hoursSinceLastGuardShift;
+
+        // קנס רציף על גאפ קצר – מחמיר (9h ייענש חזק מול 14h)
+        if (hoursSinceLastGuardShift < idealGapHours)
+        {
+            double diff = idealGapHours - hoursSinceLastGuardShift;
+            double penalty = diff * diff / 9.0; // 9h → penalty 9, 14h → ~1.8
+            score -= penalty;
+        }
+
+        // בונוס ל"נשכח" – מדורג: מעל 24h בונוס קל, מעל 36h בונוס חזק (למחוק 42h)
+        if (hoursSinceLastGuardShift > longGapSoftHours)
+            score += (hoursSinceLastGuardShift - longGapSoftHours) * 1.5;
+        if (hoursSinceLastGuardShift > longGapStrongHours)
+            score += (hoursSinceLastGuardShift - longGapStrongHours) * 2.0;
+
+        // soft-cap: מעל 30h לא להמשיך לתגמל – בלימה (27–30–36 לא ימשיכו לטפס)
+        const double softCapHours = 30.0;
+        if (hoursSinceLastGuardShift > softCapHours)
+            score -= (hoursSinceLastGuardShift - softCapHours) * 1.2;
+
+        // בונוס למי שכבר נפגע – לפזר נזק
+        if (minGapBetweenGuardShifts < alreadyHurtThreshold && minGapBetweenGuardShifts < double.MaxValue)
+            score += (alreadyHurtThreshold - minGapBetweenGuardShifts) * 2.5;
+
+        score += preferredForSlot;
+        return score;
+    }
+
+    /// <summary>
+    /// סדר עדיפויות (סעיף 5): גאפ אידיאלי → הוגנות (3) → רווחים → חיילים עם אילוצים (6) → נוחות.
+    /// 4 בקשות אישיות (PreferredForSlot). 3.ג הימנע משני לילות ברצף. 6 לא קורבן קבוע – העדפה לחיילים עם אילוצים.
+    /// </summary>
     private Soldier? SelectBestSoldier(
         List<Soldier> availableSoldiers,
         Position position,
         TimeSlot slot,
         Dictionary<string, List<SoldierAssignment>> soldierAssignments,
+        string? preferredSoldierId = null,
         TimeSlot? previousSlot = null,
-        List<string>? previousGuardSoldiers = null)
+        List<string>? previousGuardSoldiers = null,
+        HashSet<string>? soldiersWithFewerAvailableDays = null,
+        Dictionary<string, int>? availableDaysPerSoldier = null,
+        Dictionary<string, int>? relaxCountBySoldier = null)
     {
         if (!availableSoldiers.Any())
             return null;
 
+        // 3.א 3.ב פיזור שמירות ולילות – הפרש מקסימלי 1
+        // Only allow assigning to soldiers with guard count <= min + 1 (never to someone with min+2 or more when others have min/min+1).
+        if (!position.IsStandby)
+        {
+            var minGuardShifts = soldierAssignments.Values.Min(list =>
+                list.Count(a => !a.IsStandbyPosition));
+            var maxAllowedGuardShifts = minGuardShifts + 1;
+            var candidates = availableSoldiers
+                .Where(s => soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition) <= maxAllowedGuardShifts)
+                .ToList();
+            if (candidates.Any())
+                availableSoldiers = candidates;
+            else
+            {
+                // No one with <= min+1 available (all constrained) - pick those with smallest count among available
+                var minAmongAvailable = availableSoldiers.Min(s =>
+                    soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition));
+                availableSoldiers = availableSoldiers
+                    .Where(s => soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition) == minAmongAvailable)
+                    .ToList();
+            }
+
+            // לילות: איזון קפדני – הפרש מקסימלי 1 (לא 1 לילה לאחד ו־3 לאחרים). רק מי שיש לו בדיוק מינימום לילות.
+            if (IsNightShift(slot.Start, slot.End))
+            {
+                var minNightGuardShifts = soldierAssignments.Values.Min(list =>
+                    list.Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)));
+                // רק מי שיש לו בדיוק מינימום – כך אחרי שיבוץ יש לו min+1, וההפרש מכל השאר (min) הוא 1
+                var withMinNightsOnly = availableSoldiers
+                    .Where(s => soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)) == minNightGuardShifts)
+                    .ToList();
+                if (withMinNightsOnly.Any())
+                {
+                    availableSoldiers = withMinNightsOnly;
+                }
+                else
+                {
+                    // אין אף זמין עם מינימום (כולם כבר min+1 ומעלה) – לוקחים את מי שהכי פחות לילות among הזמינים
+                    var minNightAmongAvailable = availableSoldiers.Min(s =>
+                        soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)));
+                    availableSoldiers = availableSoldiers
+                        .Where(s => soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)) == minNightAmongAvailable)
+                        .ToList();
+                }
+            }
+        }
+
         // Calculate total shifts needed for fairness
         var totalShifts = soldierAssignments.Values.Sum(v => v.Count);
         var averageShiftsPerSoldier = totalShifts / (double)soldierAssignments.Count;
+
+        // Calculate guard and night-guard statistics for fairness
+        var totalGuardShifts = soldierAssignments.Values.Sum(v => v.Count(a => !a.IsStandbyPosition));
+        var totalNightGuardShifts = soldierAssignments.Values.Sum(v =>
+            v.Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)));
+
+        var averageGuardShiftsPerSoldier = totalGuardShifts / (double)soldierAssignments.Count;
+        var averageNightGuardShiftsPerSoldier = totalNightGuardShifts / (double)soldierAssignments.Count;
+
+        var isNightShift = IsNightShift(slot.Start, slot.End);
 
         // Select soldier with best balance based on position type
         return availableSoldiers
@@ -608,25 +783,61 @@ public class SchedulerService : ISchedulerService
                 HoursSinceLastShift = GetHoursSinceLastShift(s.Id, slot.Start, soldierAssignments),
                 CanBeContinuousFromGuard = CanBeContinuousFromGuard(s.Id, slot.Start, soldierAssignments),
                 TotalAssignments = soldierAssignments[s.Id].Count,
-                FairnessScore = averageShiftsPerSoldier - soldierAssignments[s.Id].Count // Positive = below average (preferred)
+                GuardAssignments = soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition),
+                NightGuardAssignments = soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)),
+                FairnessScore = averageShiftsPerSoldier - soldierAssignments[s.Id].Count, // Positive = below average (preferred)
+                GuardFairnessScore = averageGuardShiftsPerSoldier - soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition),
+                NightGuardFairnessScore = averageNightGuardShiftsPerSoldier - soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition && IsNightShift(a.ShiftStart, a.ShiftEnd)),
+                MinGapBetweenGuardShifts = GetMinGapBetweenGuardShifts(s.Id, soldierAssignments),
+                PreferredForSlot = !string.IsNullOrEmpty(preferredSoldierId) && s.Id == preferredSoldierId ? 100000.0 : 0.0, // בקשת שיבוץ ספציפי
+                LastGuardWasNight = WasLastGuardShiftNight(s.Id, slot.Start, soldierAssignments),
+                HasConstraints = HasManyConstraints(s) || (soldiersWithFewerAvailableDays != null && soldiersWithFewerAvailableDays.Contains(s.Id)),
+                BelowMinBonus = availableDaysPerSoldier != null && soldierAssignments[s.Id].Count(a => !a.IsStandbyPosition) < availableDaysPerSoldier.GetValueOrDefault(s.Id, 0) ? 1 : 0,
+                RelaxCount = relaxCountBySoldier?.GetValueOrDefault(s.Id, 0) ?? 0
             })
-            .OrderByDescending(x => 
+            .OrderByDescending(x =>
             {
                 if (!position.IsStandby)
                 {
-                    // For guard positions (שמירה) - prioritize maximum gap from last guard shift
-                    return x.HoursSinceLastGuardShift;
+                    // ציון גאפ: קנס רציף על גאפ קצר, בונוס על "נשכח" (גאפ ארוך), בונוס למי שכבר נפגע (לפזר נזק)
+                    return ComputeGuardGapScore(
+                        x.HoursSinceLastGuardShift,
+                        x.MinGapBetweenGuardShifts,
+                        x.PreferredForSlot
+                    );
                 }
                 else
                 {
-                    // For standby positions (כוננות) - prioritize continuous from guard, then gap between standby
-                    if (x.CanBeContinuousFromGuard)
-                        return 1000.0; // High priority for continuous from guard
-                    return x.HoursSinceLastStandbyShift; // Then prioritize gap between standby shifts
+                    // For standby positions (כוננות) - continuous from guard, then gap, + בקשת שיבוץ
+                    var baseScore = x.CanBeContinuousFromGuard ? 1000.0 : x.HoursSinceLastStandbyShift;
+                    return baseScore + x.PreferredForSlot;
                 }
             })
-            .ThenByDescending(x => x.FairnessScore) // Always consider fairness
-            .ThenBy(x => x.TotalAssignments) // Then by total assignments
+            // הימנע משני לילות ברצף (סעיף 3.ג): להעדיף חייל שהשמירה הקודמת שלו לא הייתה לילה
+            .ThenByDescending(x => !position.IsStandby && isNightShift ? (x.LastGuardWasNight ? 0 : 1) : 0)
+            // Fairness – שוויון שמירות ולילות:
+            .ThenByDescending(x =>
+            {
+                if (!position.IsStandby)
+                {
+                    if (isNightShift)
+                        return x.NightGuardFairnessScore;
+                    return x.GuardFairnessScore;
+                }
+                return x.FairnessScore;
+            })
+            // במשמרת יום – להעדיף גם מי שיש לו פחות לילות (שוויון לילות לאורך כל הלוח)
+            .ThenByDescending(x => !position.IsStandby && !isNightShift ? x.NightGuardFairnessScore : 0)
+            // Equalize gaps: prefer soldiers with larger current min gap
+            .ThenByDescending(x => !position.IsStandby ? x.MinGapBetweenGuardShifts : 0)
+            .ThenByDescending(x => x.FairnessScore)
+            // בונוס: מתחת למינימום שמירות ליום זמין (לא סינון – רק העדפה)
+            .ThenByDescending(x => x.BelowMinBonus)
+            // העדפה לחיילים עם אילוצים / פחות ימים
+            .ThenByDescending(x => x.HasConstraints ? 1 : 0)
+            // קנס: מי שכבר נשבר (relaxGap) – מניעת "קורבן קבוע"
+            .ThenBy(x => x.RelaxCount)
+            .ThenBy(x => x.TotalAssignments)
             .FirstOrDefault()?.Soldier;
     }
 
@@ -675,6 +886,17 @@ public class SchedulerService : ISchedulerService
         return timeSinceLastGuardShift.TotalHours;
     }
 
+    /// <summary>בודק אם השמירה הקודמת של החייל (שמירה, לא כוננות) הייתה לילה – למניעת שני לילות ברצף.</summary>
+    private bool WasLastGuardShiftNight(string soldierId, DateTime currentShiftStart, Dictionary<string, List<SoldierAssignment>> soldierAssignments)
+    {
+        var assignments = soldierAssignments[soldierId];
+        var lastGuardShift = assignments
+            .Where(a => !a.IsStandbyPosition && a.ShiftEnd < currentShiftStart)
+            .OrderByDescending(a => a.ShiftEnd)
+            .FirstOrDefault();
+        return lastGuardShift != null && IsNightShift(lastGuardShift.ShiftStart, lastGuardShift.ShiftEnd);
+    }
+
     private double GetHoursSinceLastStandbyShift(
         string soldierId,
         DateTime currentShiftStart,
@@ -710,6 +932,68 @@ public class SchedulerService : ISchedulerService
         return assignments
             .Where(a => !a.IsStandbyPosition)
             .Any(a => Math.Abs((currentShiftStart - a.ShiftEnd).TotalHours) < 1.0);
+    }
+
+    /// <summary>
+    /// Returns the minimum gap (hours) between consecutive guard shifts for this soldier.
+    /// Used to equalize gaps: prefer assigning to soldiers with larger min gap so gaps become more similar.
+    /// </summary>
+    private double GetMinGapBetweenGuardShifts(string soldierId, Dictionary<string, List<SoldierAssignment>> soldierAssignments)
+    {
+        var guardShifts = soldierAssignments[soldierId]
+            .Where(a => !a.IsStandbyPosition)
+            .OrderBy(a => a.ShiftEnd)
+            .ToList();
+        if (guardShifts.Count < 2)
+            return double.MaxValue; // No gap yet – prefer for assignment to balance
+        double minGap = double.MaxValue;
+        for (int i = 1; i < guardShifts.Count; i++)
+        {
+            var gap = (guardShifts[i].ShiftStart - guardShifts[i - 1].ShiftEnd).TotalHours;
+            if (gap < minGap) minGap = gap;
+        }
+        return minGap;
+    }
+
+    /// <summary>
+    /// Determines if a shift should be treated as a night shift.
+    /// Night is defined as shifts that start from 21:00 or before 06:00.
+    /// </summary>
+    /// <summary>שמירות לילה = 00–3, 3–6, 6–9 (שעת התחלה 0, 3 או 6).</summary>
+    private bool IsNightShift(DateTime shiftStart, DateTime shiftEnd)
+    {
+        var startHour = shiftStart.Hour;
+        return startHour == 0 || startHour == 3 || startHour == 6;
+    }
+
+    /// <summary>
+    /// Detects if a soldier has "many" constraints, so we can allow slightly smaller gaps
+    /// between guard shifts for them in order to keep overall fairness.
+    /// </summary>
+    private bool HasManyConstraints(Soldier soldier)
+    {
+        if (soldier.Constraints == null)
+            return false;
+
+        int constraintCount = 0;
+
+        if (soldier.Constraints.ForbiddenDaysOfWeek != null)
+            constraintCount += soldier.Constraints.ForbiddenDaysOfWeek.Count;
+
+        if (soldier.Constraints.ForbiddenHourRangesByDay != null)
+        {
+            foreach (var kvp in soldier.Constraints.ForbiddenHourRangesByDay)
+            {
+                if (kvp.Value != null)
+                    constraintCount += kvp.Value.Count;
+            }
+        }
+
+        if (soldier.Constraints.ForbiddenPositions != null)
+            constraintCount += soldier.Constraints.ForbiddenPositions.Count;
+
+        // 3+ separate constraints are considered "many"
+        return constraintCount >= 3;
     }
 
     private class TimeSlot
@@ -757,19 +1041,20 @@ public class SchedulerService : ISchedulerService
             // Check if shift is on the end day of the range
             if (shiftDayOfWeek == rangeEndDay)
             {
-                // Shift is on range end day
-                // Check if shift overlaps with the end part of the range (from midnight to EndHour)
+                // Shift is on range end day - range on this day is [0, EndHour]
                 if (shiftEndHour <= shiftStartHour)
                 {
-                    // Shift crosses midnight
-                    // Check if shift end hour (after midnight) is within range (0 to EndHour)
+                    // Shift crosses midnight (e.g. 21:00-00:00)
+                    // Same-day part [shiftStartHour, 24) overlaps [0, EndHour] if shiftStartHour < EndHour
+                    if (shiftStartHour < forbiddenRange.EndHour)
+                        return true;
+                    // After-midnight part [0, shiftEndHour) overlaps [0, EndHour]
                     if (shiftEndHour > 0 && shiftEndHour <= forbiddenRange.EndHour)
                         return true;
                 }
                 else
                 {
                     // Normal shift on end day
-                    // Check if shift overlaps with range from 0 to EndHour
                     if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > 0)
                         return true;
                 }
@@ -803,20 +1088,20 @@ public class SchedulerService : ISchedulerService
         }
         else
         {
-            // Normal range within same day (e.g., 08:00-17:00)
+            // Normal range within same day (e.g., 09:00-23:00)
             if (shiftDayOfWeek == rangeStartDay)
             {
                 if (shiftEndHour <= shiftStartHour)
                 {
-                    // Shift crosses midnight, range doesn't
-                    // Check if shift overlaps with range
-                    if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > forbiddenRange.StartHour)
+                    // Shift crosses midnight (e.g. 21:00-00:00), range doesn't
+                    // Same-day part of shift is [shiftStartHour, 24) - check overlap with [StartHour, EndHour]
+                    // Overlap if shift starts before range ends: shiftStartHour <= EndHour
+                    if (shiftStartHour <= forbiddenRange.EndHour && forbiddenRange.StartHour < 24)
                         return true;
                 }
                 else
                 {
-                    // Normal shift, normal range
-                    // Check if they overlap
+                    // Normal shift, normal range - overlap if [start,end) overlaps [StartHour, EndHour]
                     if (shiftStartHour < forbiddenRange.EndHour && shiftEndHour > forbiddenRange.StartHour)
                         return true;
                 }
@@ -824,6 +1109,259 @@ public class SchedulerService : ISchedulerService
         }
         
         return false;
+    }
+
+    /// <summary>דוח בדיקות סופיות לפני סגירה – מי עם הכי מעט/הרבה שמירות, הרווח הכי קצר/ארוך (סעיף 7).</summary>
+    public async Task<ScheduleValidationReport> GetScheduleValidationReportAsync(List<DaySchedule> schedule)
+    {
+        var report = new ScheduleValidationReport();
+        if (schedule == null || !schedule.Any())
+            return report;
+
+        var positions = await _positionRepository.GetAllAsync();
+        var posIsStandby = positions.ToDictionary(p => p.Id, p => p.IsStandby);
+
+        // soldierId -> list of (Start, End, IsStandby)
+        var soldierShifts = new Dictionary<string, List<(DateTime Start, DateTime End, bool IsStandby)>>();
+        foreach (var day in schedule)
+        {
+            foreach (var a in day.Assignments)
+            {
+                if (string.IsNullOrEmpty(a.SoldierId)) continue;
+                if (a.IsForced)
+                    report.ForcedAssignments.Add(new ForcedAssignmentInfo { Date = day.Date, ShiftNumber = day.ShiftNumber, PositionName = a.PositionName, SoldierName = a.SoldierName });
+                var isStandby = posIsStandby.TryGetValue(a.PositionId, out var sb) && sb;
+                if (!soldierShifts.ContainsKey(a.SoldierId))
+                    soldierShifts[a.SoldierId] = new List<(DateTime, DateTime, bool)>();
+                soldierShifts[a.SoldierId].Add((day.Start, day.End, isStandby));
+            }
+        }
+
+        var statsList = new List<SoldierScheduleStats>();
+        double? globalMinGap = null;
+        double? globalMaxGap = null;
+
+        foreach (var kv in soldierShifts)
+        {
+            var guardOnly = kv.Value.Where(t => !t.IsStandby).OrderBy(t => t.Start).ToList();
+            var totalShifts = kv.Value.Count;
+            var guardCount = guardOnly.Count;
+            var nightCount = guardOnly.Count(t => IsNightShift(t.Start, t.End));
+            double? minGap = null;
+            double? maxGap = null;
+            double? averageGap = null;
+            if (guardOnly.Count >= 2)
+            {
+                double sumGap = 0;
+                for (int i = 1; i < guardOnly.Count; i++)
+                {
+                    var gap = (guardOnly[i].Start - guardOnly[i - 1].End).TotalHours;
+                    sumGap += gap;
+                    if (!minGap.HasValue || gap < minGap.Value) minGap = gap;
+                    if (!maxGap.HasValue || gap > maxGap.Value) maxGap = gap;
+                }
+                averageGap = sumGap / (guardOnly.Count - 1);
+                if (!globalMinGap.HasValue || minGap < globalMinGap) globalMinGap = minGap;
+                if (!globalMaxGap.HasValue || maxGap > globalMaxGap) globalMaxGap = maxGap;
+            }
+
+            var name = schedule.SelectMany(d => d.Assignments).FirstOrDefault(a => a.SoldierId == kv.Key)?.SoldierName ?? kv.Key;
+            statsList.Add(new SoldierScheduleStats
+            {
+                SoldierId = kv.Key,
+                SoldierName = name,
+                TotalShifts = totalShifts,
+                GuardCount = guardCount,
+                NightGuardCount = nightCount,
+                AverageGapHours = averageGap,
+                MinGapHours = minGap,
+                MaxGapHours = maxGap
+            });
+        }
+
+        report.PerSoldierStats = statsList;
+        if (!statsList.Any()) return report;
+
+        var minGuards = statsList.Min(s => s.GuardCount);
+        var maxGuards = statsList.Max(s => s.GuardCount);
+        report.SoldiersWithFewestGuards = statsList.Where(s => s.GuardCount == minGuards).Select(s => s.SoldierName).ToList();
+        report.SoldiersWithMostGuards = statsList.Where(s => s.GuardCount == maxGuards).Select(s => s.SoldierName).ToList();
+
+        var minNights = statsList.Min(s => s.NightGuardCount);
+        var maxNights = statsList.Max(s => s.NightGuardCount);
+        report.SoldiersWithFewestNights = statsList.Where(s => s.NightGuardCount == minNights).Select(s => s.SoldierName).ToList();
+        report.SoldiersWithMostNights = statsList.Where(s => s.NightGuardCount == maxNights).Select(s => s.SoldierName).ToList();
+
+        if (globalMinGap.HasValue)
+        {
+            report.ShortestGapHours = globalMinGap.Value;
+            report.SoldiersWithShortestGap = statsList.Where(s => s.MinGapHours.HasValue && Math.Abs(s.MinGapHours.Value - globalMinGap.Value) < 0.01).Select(s => s.SoldierName).ToList();
+        }
+        if (globalMaxGap.HasValue)
+        {
+            report.LongestGapHours = globalMaxGap.Value;
+            report.SoldiersWithLongestGap = statsList.Where(s => s.MaxGapHours.HasValue && Math.Abs(s.MaxGapHours.Value - globalMaxGap.Value) < 0.01).Select(s => s.SoldierName).ToList();
+        }
+
+        return report;
+    }
+
+    /// <summary>בדיקת אילוצים קשיחים (סעיף 1) – אם יש הפרות, הרשימה לא תקינה.</summary>
+    public async Task<ScheduleHardConstraintsValidationResult> ValidateScheduleHardConstraintsAsync(List<DaySchedule> schedule)
+    {
+        var result = new ScheduleHardConstraintsValidationResult { IsValid = true };
+        if (schedule == null || !schedule.Any())
+            return result;
+
+        var soldiers = (await _soldierRepository.GetAllAsync()).ToDictionary(s => s.Id);
+        var positions = (await _positionRepository.GetAllAsync()).ToDictionary(p => p.Id);
+
+        const double hardMinGapHours = 12.0;
+
+        // א. זמינות + ב. עמדות + ג. חפיפות: בונים שיבוצים לכל חייל
+        var soldierShifts = new Dictionary<string, List<(DateTime Start, DateTime End, string PositionId, bool IsStandby)>>();
+        foreach (var day in schedule)
+        {
+            var seenInSlot = new HashSet<string>();
+            foreach (var a in day.Assignments)
+            {
+                if (string.IsNullOrEmpty(a.SoldierId)) continue;
+
+                // חייל לא בשתי עמדות באותו סלוט (סעיף 1.א)
+                if (!seenInSlot.Add(a.SoldierId))
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: החייל {a.SoldierName} משובץ ביותר מעמדה אחת באותו סלוט.");
+                    result.IsValid = false;
+                }
+
+                if (!soldiers.TryGetValue(a.SoldierId, out var soldierObj))
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: חייל לא קיים ({a.SoldierId}).");
+                    result.IsValid = false;
+                    continue;
+                }
+                if (!positions.TryGetValue(a.PositionId, out var position))
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: עמדה לא קיימת ({a.PositionId}).");
+                    result.IsValid = false;
+                    continue;
+                }
+
+                // דרישות עמדה – מפקד (סעיף 1.ב)
+                if (position.RequiresCommander && !soldierObj.IsCommander)
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: העמדה דורשת מפקד, {a.SoldierName} אינו מפקד.");
+                    result.IsValid = false;
+                }
+
+                // עמדות אסורות לחייל (סעיף 1.ב)
+                if (soldierObj.Constraints?.ForbiddenPositions != null && soldierObj.Constraints.ForbiddenPositions.Contains(a.PositionId))
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: {a.SoldierName} – עמדה אסורה ({position.Name}).");
+                    result.IsValid = false;
+                }
+
+                var dayOfWeek = (int)day.Start.DayOfWeek;
+                var dayOfWeekStr = dayOfWeek.ToString();
+                var shiftStartHour = day.Start.Hour;
+                var shiftEndHour = day.End.Hour;
+
+                // ימים שלמים אסורים (סעיף 1.א)
+                if (soldierObj.Constraints?.ForbiddenDaysOfWeek != null && soldierObj.Constraints.ForbiddenDaysOfWeek.Contains(dayOfWeek))
+                {
+                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: {a.SoldierName} – יום אסור.");
+                    result.IsValid = false;
+                }
+
+                // שעות אסורות / טווחים אסורים (סעיף 1.א, כולל טווחים חוצי ימים)
+                if (soldierObj.Constraints != null)
+                {
+                    if (soldierObj.Constraints.ForbiddenHoursByDay != null && soldierObj.Constraints.ForbiddenHoursByDay.ContainsKey(dayOfWeekStr))
+                    {
+                        var forbiddenHours = soldierObj.Constraints.ForbiddenHoursByDay[dayOfWeekStr];
+                        if (forbiddenHours != null && forbiddenHours.Any())
+                        {
+                            var shiftHours = new List<int>();
+                            if (shiftEndHour <= shiftStartHour)
+                            {
+                                for (int h = shiftStartHour; h < 24; h++) shiftHours.Add(h);
+                                for (int h = 0; h < shiftEndHour; h++) shiftHours.Add(h);
+                            }
+                            else
+                                for (int h = shiftStartHour; h < shiftEndHour; h++) shiftHours.Add(h);
+                            if (shiftHours.Any(h => forbiddenHours.Contains(h)))
+                            {
+                                result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: {a.SoldierName} – שעה אסורה.");
+                                result.IsValid = false;
+                            }
+                        }
+                    }
+                    if (soldierObj.Constraints.ForbiddenHourRangesByDay != null)
+                    {
+                        if (soldierObj.Constraints.ForbiddenHourRangesByDay.ContainsKey(dayOfWeekStr))
+                        {
+                            var ranges = soldierObj.Constraints.ForbiddenHourRangesByDay[dayOfWeekStr];
+                            if (ranges != null)
+                                foreach (var range in ranges)
+                                {
+                                    if (IsTimeRangeOverlapping(shiftStartHour, shiftEndHour, dayOfWeek, dayOfWeek, range))
+                                    {
+                                        result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: {a.SoldierName} – טווח שעות אסור.");
+                                        result.IsValid = false;
+                                        break;
+                                    }
+                                }
+                        }
+                        foreach (var kvp in soldierObj.Constraints.ForbiddenHourRangesByDay)
+                        {
+                            var rangeStartDay = int.Parse(kvp.Key);
+                            var ranges = kvp.Value;
+                            if (ranges == null) continue;
+                            foreach (var range in ranges)
+                            {
+                                if (range.EndDay.HasValue && range.EndDay.Value == dayOfWeek &&
+                                    IsTimeRangeOverlapping(shiftStartHour, shiftEndHour, dayOfWeek, rangeStartDay, range))
+                                {
+                                    result.Violations.Add($"{day.Date} משמרת {day.ShiftNumber}: {a.SoldierName} – טווח שעות אסור (חוצה ימים).");
+                                    result.IsValid = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var isStandby = position.IsStandby;
+                if (!soldierShifts.ContainsKey(a.SoldierId))
+                    soldierShifts[a.SoldierId] = new List<(DateTime, DateTime, string, bool)>();
+                soldierShifts[a.SoldierId].Add((day.Start, day.End, a.PositionId, isStandby));
+            }
+        }
+
+        // ג. חפיפות ורווח מינימלי (סעיף 1.ג + 2.א): אין חפיפה בין שמירות, רווח מינימלי 12 שעות
+        foreach (var kv in soldierShifts)
+        {
+            var soldierName = schedule.SelectMany(d => d.Assignments).FirstOrDefault(a => a.SoldierId == kv.Key)?.SoldierName ?? kv.Key;
+            var guardOnly = kv.Value.Where(t => !t.IsStandby).OrderBy(t => t.Start).ToList();
+            for (int i = 1; i < guardOnly.Count; i++)
+            {
+                var prev = guardOnly[i - 1];
+                var curr = guardOnly[i];
+                if (curr.Start < prev.End)
+                {
+                    result.Violations.Add($"{soldierName}: חפיפה בין שמירות ({prev.End:g} – {curr.Start:g}).");
+                    result.IsValid = false;
+                }
+                var gap = (curr.Start - prev.End).TotalHours;
+                if (gap < hardMinGapHours)
+                {
+                    result.Violations.Add($"{soldierName}: רווח {gap:F1} שעות בין שמירות (מינימום {hardMinGapHours}).");
+                    result.IsValid = false;
+                }
+            }
+        }
+
+        return result;
     }
 
     private class SoldierAssignment
