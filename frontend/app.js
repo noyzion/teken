@@ -1182,7 +1182,7 @@ function addShiftRequestRow() {
     hourInput.type = 'number';
     hourInput.min = 0;
     hourInput.max = 23;
-    hourInput.placeholder = 'שעה (ריק=כל משמרת)';
+    hourInput.placeholder = 'שעה (ריק=כל שמירה)';
     hourInput.className = 'modern-input';
     hourInput.style.width = '100px';
     const removeBtn = document.createElement('button');
@@ -1257,13 +1257,13 @@ async function generateSchedule() {
     }
 
     const statusDiv = document.getElementById('scheduleStatus');
-    statusDiv.innerHTML = '<p>יוצר לוח זמנים עם מרווח מקסימלי בין משמרות...</p>';
+    statusDiv.innerHTML = '<p>יוצר לוח זמנים עם מרווח מקסימלי בין שמירות...</p>';
     statusDiv.className = '';
 
     const firstShiftStartHourInput = document.getElementById('firstShiftStartHour')?.value;
     const firstShiftStartHour = firstShiftStartHourInput === '' || firstShiftStartHourInput === undefined ? null : parseInt(firstShiftStartHourInput);
     if (firstShiftStartHour !== null && (firstShiftStartHour < 0 || firstShiftStartHour > 23)) {
-        showNotification('שעת התחלה של משמרת ראשונה חייבת להיות בין 0 ל-23', 'error');
+        showNotification('שעת התחלה של שמירה ראשונה חייבת להיות בין 0 ל-23', 'error');
         return;
     }
 
@@ -1294,10 +1294,10 @@ async function generateSchedule() {
         if (response.ok) {
             schedule = await response.json();
             console.log('לוח זמנים התקבל:', schedule);
-            console.log('מספר משמרות בלוח:', schedule.length);
+            console.log('מספר שמירות בלוח:', schedule.length);
             if (schedule.length > 0) {
-                console.log('משמרת ראשונה:', schedule[0]);
-                console.log('מספר שיבוצים במשמרת ראשונה:', schedule[0].assignments?.length || 0);
+                console.log('שמירה ראשונה:', schedule[0]);
+                console.log('מספר שיבוצים בשמירה ראשונה:', schedule[0].assignments?.length || 0);
             }
             
             statusDiv.innerHTML = '<p class="success">לוח זמנים נוצר בהצלחה!</p>';
@@ -1369,7 +1369,7 @@ function toggleEditMode() {
 function displaySchedule() {
     console.log('=== displaySchedule - התחלה ===');
     console.log('לוח זמנים נוכחי:', schedule);
-    console.log('מספר משמרות:', schedule.length);
+    console.log('מספר שמירות:', schedule.length);
     
     const view = document.getElementById('scheduleView');
     if (!view) {
@@ -1552,7 +1552,7 @@ function displaySchedule() {
         const shiftNumber = item.shiftNumber !== undefined ? item.shiftNumber : item.ShiftNumber;
         
         if (!date || shiftNumber === undefined) {
-            console.warn('פריט ללא תאריך או מספר משמרת:', item);
+            console.warn('פריט ללא תאריך או מספר שמירה:', item);
             return;
         }
         
@@ -1589,7 +1589,7 @@ function displaySchedule() {
         shifts.forEach((shiftNum, index) => {
             const shift = scheduleByDateAndShift[date][shiftNum];
             if (!shift) {
-                console.warn(`משמרת ${shiftNum} לא נמצאה ליום ${date}`);
+                console.warn(`שמירה ${shiftNum} לא נמצאה ליום ${date}`);
                 return;
             }
             
@@ -1598,7 +1598,7 @@ function displaySchedule() {
             const assignments = shift.assignments || shift.Assignments || [];
             
             if (!start || !end) {
-                console.warn(`משמרת ${shiftNum} ללא תאריכי התחלה/סיום:`, shift);
+                console.warn(`שמירה ${shiftNum} ללא תאריכי התחלה/סיום:`, shift);
                 return;
             }
             
@@ -1796,7 +1796,7 @@ function showNotification(message, type = 'info') {
     `;
 
     if (type === 'success') {
-        notification.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+        notification.style.background = 'linear-gradient(135deg, #166534 0%, #14532d 100%)';
         notification.style.color = 'white';
     } else if (type === 'error') {
         notification.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
@@ -1805,7 +1805,7 @@ function showNotification(message, type = 'info') {
         notification.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
         notification.style.color = 'white';
     } else {
-        notification.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+        notification.style.background = 'linear-gradient(135deg, #2d5016 0%, #1e3d0f 100%)';
         notification.style.color = 'white';
     }
 
@@ -1973,7 +1973,7 @@ function openEditCell(date, shiftNumber, positionId, currentSoldierId, currentSo
                 </button>
                 ${currentSoldierId ? `
                 <button class="btn-primary" onclick="openSwapAllShifts('${currentSoldierId}', '${currentSoldierName}')">
-                    החלף חייל בכל המשמרות שלו
+                    החלף חייל בכל השמירות שלו
                 </button>
                 ` : ''}
                                     </div>
@@ -2039,11 +2039,11 @@ function openSwapAllShifts(soldier1Id, soldier1Name) {
     
     modalContent.innerHTML = `
         <div class="edit-form">
-            <p>מחליף את כל המשמרות של <strong>${soldier1Name}</strong> עם חייל אחר</p>
+            <p>מחליף את כל השמירות של <strong>${soldier1Name}</strong> עם חייל אחר</p>
             ${selectHTML}
             <div class="form-actions" style="margin-top: 20px;">
                 <button class="btn-primary" onclick="swapSoldiers('${soldier1Id}', '${soldier1Name}')">
-                    החלף בכל המשמרות
+                    החלף בכל השמירות
                 </button>
                 <button class="btn-secondary" onclick="closeEditModal()">ביטול</button>
             </div>
@@ -2145,7 +2145,7 @@ async function swapSoldiers(soldier1Id, soldier1Name) {
             closeEditModal();
             displaySchedule();
             updateUndoButton();
-            showNotification('חיילים הוחלפו בהצלחה בכל המשמרות', 'success');
+            showNotification('חיילים הוחלפו בהצלחה בכל השמירות', 'success');
         } else {
             const error = await response.text();
             showNotification(`שגיאה: ${error}`, 'error');
@@ -2747,7 +2747,7 @@ function exportToCSV() {
         
         // Add statistics section
         csvContent += '\nסטטיסטיקות חיילים\n';
-        csvContent += 'שם חייל,סה"כ משמרות,שמירות,שמירות לילה,רווח ממוצע (שעות),רווח מינימלי (שעות),רווח מקסימלי (שעות)\n';
+        csvContent += 'שם חייל,סה"כ שמירות,שמירות,שמירות לילה,רווח ממוצע (שעות),רווח מינימלי (שעות),רווח מקסימלי (שעות)\n';
         
         const allSoldiers = Array.from(new Set(
             schedule.flatMap(item => {
@@ -2953,6 +2953,27 @@ async function exportToGoogleSheets() {
     }
 }
 
+// הורדת קובץ אקסל ריק בפורמט הנדרש להעלאה
+async function downloadExcelTemplate() {
+    try {
+        const res = await fetch(API_BASE + '/ScheduleExcel/template');
+        if (!res.ok) throw new Error(res.statusText || 'שגיאה בהורדה');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'תבנית_שמירות.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('הקובץ הורד.', 'success');
+    } catch (error) {
+        console.error('Error downloading template:', error);
+        showNotification('שגיאה בהורדת התבנית', 'error');
+    }
+}
+
 // העלאת אקסל וחישוב סטטיסטיקות לכל חייל
 async function uploadExcelAndShowStats() {
     const fileInput = document.getElementById('excelFileInput');
@@ -2997,13 +3018,13 @@ async function uploadExcelAndShowStats() {
 
         const stats = report.perSoldierStats || report.PerSoldierStats || [];
         if (!stats.length) {
-            resultEl.innerHTML = '<p>לא נמצאו שורות משמרות בקובץ (או שעמודות הכותרות לא זוהו).</p>';
+            resultEl.innerHTML = '<p>לא נמצאו שורות שמירות בקובץ (או שעמודות הכותרות לא זוהו).</p>';
             resultEl.style.display = 'block';
             return;
         }
 
         let html = '<h3>סטטיסטיקות חיילים</h3><div class="stats-grid">';
-        const colors = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#65a30d', '#ca8a04'];
+        const colors = ['#2d5016', '#166534', '#4a7c23', '#556b2f', '#65a30d', '#15803d', '#16a34a', '#22c55e'];
         stats.forEach((s, i) => {
             const color = colors[i % colors.length];
             const min = s.minGapHours != null ? s.minGapHours.toFixed(1) : '–';

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מערכת ניהול משמרות</title>
+    <title>מערכת ניהול שמירות</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -11,8 +11,8 @@
     <div class="container">
         <header>
             <div class="header-content">
-                <h1>מערכת ניהול משמרות</h1>
-                <p class="subtitle">ניהול חכם ויעיל של חלוקת משמרות</p>
+                <h1>מערכת ניהול שמירות</h1>
+                <p class="subtitle">ניהול חכם ויעיל של חלוקת שמירות</p>
             </div>
         </header>
 
@@ -82,7 +82,7 @@
                         <input type="checkbox" id="positionIsStandby" class="modern-checkbox">
                         <span class="label-text">כוננות (יכול להיות רצוף)</span>
                     </label>
-                    <small class="input-hint">סמן אם זו עמדת כוננות - ניתן לשבץ רצוף. אם לא מסומן, זו עמדת שמירה שדורשת רווח בין משמרות</small>
+                    <small class="input-hint">סמן אם זו עמדת כוננות - ניתן לשבץ רצוף. אם לא מסומן, זו עמדת שמירה שדורשת רווח בין שמירות</small>
                 </div>
                 <button class="btn-primary" onclick="addPosition()">
                     <span>הוסף עמדה</span>
@@ -209,18 +209,18 @@
                 </div>
                 <div class="form-group">
                     <label class="input-label">
-                        <span class="label-text">שעת התחלה של משמרת ראשונה (אופציונלי)</span>
+                        <span class="label-text">שעת התחלה של שמירה ראשונה (אופציונלי)</span>
                         <input type="number" id="firstShiftStartHour" class="modern-input" min="0" max="23" placeholder="ריק = חצות. למשל 6 = 6-9, 9-12, 12-15...">
-                        <small class="input-hint">שעה (0-23). למשל 6 יוצר משמרות: 6-9, 9-12, 12-15, 15-18, 18-21, 21-00, 00-3, 3-6 (כיסוי מלא 24 שעות)</small>
+                        <small class="input-hint">שעה (0-23). למשל 6 יוצר שמירות: 6-9, 9-12, 12-15, 15-18, 18-21, 21-00, 00-3, 3-6 (כיסוי מלא 24 שעות)</small>
                     </label>
                 </div>
                 <div class="info-box">
                     <span class="info-icon">ℹ</span>
-                    <span>המשמרות רצופות לאורך כל היום והלילה (ללא פערים). אורך משמרת נקבע בהגדרות. שעת משמרת ראשונה קובעת מאיפה מתחילים (למשל 6 = משמרות מתחילות ב-6:00).</span>
+                    <span>השמירות רצופות לאורך כל היום והלילה (ללא פערים). אורך שמירה נקבע בהגדרות. שעת שמירה ראשונה קובעת מאיפה מתחילים (למשל 6 = שמירות מתחילות ב-6:00).</span>
                 </div>
                 <div class="form-group">
                     <span class="label-text">בקשות לשיבוץ ספציפי</span>
-                    <small class="input-hint">בקש לשים חייל במשמרת בתאריך (אופציונלי: שעת התחלה של המשמרת). האלגוריתם יתחשב ככל האפשר.</small>
+                    <small class="input-hint">בקש לשים חייל בשמירה בתאריך (אופציונלי: שעת התחלה של השמירה). האלגוריתם יתחשב ככל האפשר.</small>
                     <div id="shiftRequestsContainer" style="margin-top: 8px;"></div>
                     <button type="button" class="btn-secondary" onclick="addShiftRequestRow()" style="margin-top: 8px;">
                         <span>+ הוסף בקשה</span>
@@ -309,7 +309,13 @@
         <div id="excel-stats" class="tab-content">
             <div class="card">
                 <h2>סטטיסטיקות מקובץ אקסל</h2>
-                <p class="input-hint" style="margin-bottom: 16px;">העלה קובץ אקסל (.xlsx) עם שורות משמרות. שורה ראשונה = כותרות. עמודות: תאריך, שעת התחלה, שעת סיום, עמדה, חייל (או Date, Start, End, Position, Soldier). עמדה שמכילה "כוננות" תחשב ככוננות.</p>
+                <p class="input-hint" style="margin-bottom: 16px;">העלה קובץ אקסל (.xlsx) עם שורות שמירות. שורה ראשונה = כותרות. עמודות: תאריך, שעת התחלה, שעת סיום, עמדה, חייל (או Date, Start, End, Position, Soldier). עמדה שמכילה "כוננות" תחשב ככוננות.</p>
+                <p style="margin-bottom: 12px;">
+                    <button type="button" class="btn-secondary" onclick="downloadExcelTemplate()">
+                        <span>הורד קובץ שמירות ריק לפי הפורמט</span>
+                    </button>
+                    <span class="input-hint" style="margin-right: 8px;">— תבנית עם הכותרות הנדרשות, מלא והעלה.</span>
+                </p>
                 <div class="form-group">
                     <label class="input-label">
                         <span class="label-text">קובץ אקסל</span>

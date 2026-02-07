@@ -16,7 +16,7 @@
 פתח PowerShell או Command Prompt בתיקיית הפרויקט והרץ:
 
 ```bash
-cd backend/ShiftScheduler.API
+cd backend
 dotnet restore
 dotnet run
 ```
@@ -41,5 +41,5 @@ http://localhost:5000
 אם יש שגיאות:
 1. ודא ש-.NET 8.0 SDK מותקן: `dotnet --version`
 2. הרץ `dotnet restore` בתיקיית הפרויקט
-3. ודא שכל הקבצים קיימים בתיקייה `backend/ShiftScheduler.API/`
+3. ודא שכל הקבצים קיימים בתיקייה `backend/`
 4. ודא שתיקיית `frontend/` קיימת עם הקבצים: index.html, styles.css, app.js

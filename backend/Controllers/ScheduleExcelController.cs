@@ -77,6 +77,43 @@ public class ScheduleExcelController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// מוריד קובץ אקסל ריק בפורמט הנדרש להעלאה: גיליון "מטריצה" (תאריך, שעה, עמדות) וגיליון "רשימה" (תאריך, שעת התחלה, שעת סיום, עמדה, חייל).
+    /// </summary>
+    [HttpGet("template")]
+    public async Task<IActionResult> DownloadTemplate()
+    {
+        var positions = await _positionRepository.GetAllAsync();
+        using var workbook = new XLWorkbook();
+
+        // גיליון מטריצה: שורה ראשונה = תאריך | שעה | [שמות עמדות]
+        var matrixSheet = workbook.Worksheets.Add("מטריצה");
+        matrixSheet.Cell(1, 1).Value = "תאריך";
+        matrixSheet.Cell(1, 2).Value = "שעה";
+        int col = 3;
+        foreach (var pos in positions)
+        {
+            matrixSheet.Cell(1, col).Value = pos.Name ?? pos.Id;
+            col++;
+        }
+        // שורת דוגמה אחת להמחשה (מחק או מלא לפי הצורך)
+        matrixSheet.Cell(2, 1).Value = "2025-02-08";
+        matrixSheet.Cell(2, 2).Value = "12:00-15:00";
+
+        // גיליון רשימה: תאריך | שעת התחלה | שעת סיום | עמדה | חייל
+        var listSheet = workbook.Worksheets.Add("רשימה");
+        listSheet.Cell(1, 1).Value = "תאריך";
+        listSheet.Cell(1, 2).Value = "שעת התחלה";
+        listSheet.Cell(1, 3).Value = "שעת סיום";
+        listSheet.Cell(1, 4).Value = "עמדה";
+        listSheet.Cell(1, 5).Value = "חייל";
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream, false);
+        stream.Position = 0;
+        return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "תבנית_שמירות.xlsx");
+    }
+
     private static ParseExcelResult ParseExcelToStats(Stream excelStream)
     {
         var report = new ScheduleValidationReport();

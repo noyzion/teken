@@ -13,13 +13,12 @@
 
 ```
 teken/
-├── src/
-│   └── ShiftScheduler.API/        # Backend API
-│       ├── Controllers/           # API Controllers
-│       ├── Services/              # Business Logic
-│       ├── Repositories/          # Data Access Layer
-│       ├── Interfaces/            # Contracts & Interfaces
-│       └── Models/                # Data Models
+├── backend/                       # Backend API
+│   ├── Controllers/               # API Controllers
+│   ├── Services/                  # Business Logic
+│   ├── Repositories/              # Data Access Layer
+│   ├── Interfaces/                # Contracts & Interfaces
+│   └── Models/                    # Data Models
 ├── frontend/                      # Frontend Application
 │   ├── index.html
 │   ├── styles.css
@@ -42,7 +41,7 @@ cd teken
 
 2. הפעל את השרת:
 ```bash
-cd src/ShiftScheduler.API
+cd backend
 dotnet run
 ```
 
