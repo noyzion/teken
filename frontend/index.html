@@ -17,7 +17,10 @@
         </header>
 
         <nav class="tabs">
-            <button class="tab-btn active" data-tab="settings">
+            <button class="tab-btn active" data-tab="home">
+                <span>עמוד בית</span>
+            </button>
+            <button class="tab-btn" data-tab="settings">
                 <span>הגדרות</span>
             </button>
             <button class="tab-btn" data-tab="positions">
@@ -35,16 +38,52 @@
             <button class="tab-btn" data-tab="view">
                 <span>לוח זמנים</span>
             </button>
-            <button class="tab-btn" data-tab="saved">
-                <span>לוחות שמורים</span>
-            </button>
             <button class="tab-btn" data-tab="excel-stats">
                 <span>סטטיסטיקות מקובץ</span>
             </button>
         </nav>
 
+        <!-- Home Tab -->
+        <div id="home" class="tab-content active">
+            <div class="card home-card">
+                <h2>מה אפשר לעשות באתר?</h2>
+                <p class="home-intro">מערכת ניהול השמירות מאפשרת לבנות לוח שמירות אוטומטי לפי עמדות, חיילים ואילוצים. הנה כל האפשרויות:</p>
+                <div class="home-sections">
+                    <section class="home-section">
+                        <h3>הגדרות</h3>
+                        <p>להגדיר כמה שעות נמשכת כל שמירה (גלובלי לכל העמדות). ההגדרה משפיעה על חלוקת המשמרות לאורך היממה.</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>עמדות</h3>
+                        <p>להוסיף עמדות שמירה (למשל ש.ג, אחורי, מנהלתי, מבצעי). לכל עמדה אפשר לסמן אם דורשת מפקד, ואם זו עמדת כוננות (ניתן לשבץ רצוף) או שמירה (צריך רווח בין שמירות).</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>חיילים</h3>
+                        <p>להוסיף חיילים לרשימה – אחד אחד או בהדבקת רשימה. אפשר לסמן חיילים כמפקדים. החיילים ישמשו לשיבוץ אוטומטי בכל העמדות.</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>אילוצים</h3>
+                        <p>להגדיר לכל חייל: ימים אסורים, שעות אסורות לפי יום, טווחי שעות אסורים, ועמדות אסורות. האלגוריתם מכבד את כל האילוצים ומפזר שמירות ולילות באופן הוגן.</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>תזמון</h3>
+                        <p>לבחור טווח תאריכים (התחלה וסיום) ולבקש לוח זמנים. אפשר להגדיר שעת התחלה של שמירה ראשונה ובקשות שיבוץ ספציפי (לשים חייל בתאריך/שעה מסוימת). לחיצה על "צור לוח" מפעילה את האלגוריתם ויוצרת את הרשימה.</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>לוח זמנים</h3>
+                        <p>לצפות בלוח שנוצר בטבלה: לפי שעות וימים, עם כל השיבוצים. אפשר לערוך שיבוץ בודד (החלפת חייל בשעה מסוימת), להחליף חייל בכל השמירות שלו, או להחליף בין שני חיילים. לחיצה על חייל מדגישה את כל ההופעות שלו. יש סטטיסטיקות לכל חייל וייצוא ל־CSV או Google Sheets.</p>
+                    </section>
+                    <section class="home-section">
+                        <h3>סטטיסטיקות מקובץ</h3>
+                        <p>להוריד תבנית אקסל ריקה בפורמט הנדרש, למלא אותה ברשימת שמירות (בפורמט מטריצה או רשימה), ולהעלות את הקובץ כדי לקבל סטטיסטיקות לכל חייל ובדיקת אילוצים.</p>
+                    </section>
+                </div>
+                <p class="home-cta">בחר אחת מהלשוניות למעלה כדי להתחיל.</p>
+            </div>
+        </div>
+
         <!-- Settings Tab -->
-        <div id="settings" class="tab-content active">
+        <div id="settings" class="tab-content">
             <div class="card">
                 <h2>הגדרות כלליות</h2>
                 <div class="form-group">
@@ -248,60 +287,6 @@
                     </div>
                 </div>
                 <div id="scheduleView" class="schedule-view"></div>
-            </div>
-        </div>
-
-        <!-- Saved Schedules Tab -->
-        <div id="saved" class="tab-content">
-            <div class="card">
-                <h2>לוחות זמנים שמורים</h2>
-                
-                <!-- Save Current Schedule -->
-                <div class="card" style="margin-bottom: 30px;">
-                    <h3>שמור לוח זמנים נוכחי</h3>
-                    <div class="form-group">
-                        <label class="input-label">
-                            <span class="label-text">שם לוח זמנים</span>
-                            <input type="text" id="scheduleName" class="modern-input" placeholder="למשל: לוח ינואר 2024">
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label class="input-label">
-                            <span class="label-text">תיאור (אופציונלי)</span>
-                            <textarea id="scheduleDescription" class="modern-textarea" placeholder="תיאור קצר של הלוח..."></textarea>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="scheduleIsShared" class="modern-checkbox">
-                            <span class="label-text">שתף לוח זמנים זה</span>
-                        </label>
-                    </div>
-                    <button class="btn-primary" onclick="saveCurrentSchedule()">
-                        <span>שמור לוח זמנים</span>
-                    </button>
-                </div>
-                
-                <!-- Load Saved Schedules -->
-                <div class="card">
-                    <h3>לוחות זמנים שמורים</h3>
-                    <div id="savedSchedulesList" class="list"></div>
-                </div>
-                
-                <!-- Shared Schedules -->
-                <div class="card" style="margin-top: 30px;">
-                    <h3>לוחות זמנים משותפים</h3>
-                    <div class="form-group">
-                        <label class="input-label">
-                            <span class="label-text">טען לוח זמנים משותף לפי קוד</span>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="shareCodeInput" class="modern-input" placeholder="הזן קוד שיתוף (6 תווים)" maxlength="6" style="text-transform: uppercase;">
-                                <button class="btn-primary" onclick="loadSharedSchedule()">טען</button>
-                            </div>
-                        </label>
-                    </div>
-                    <div id="sharedSchedulesList" class="list"></div>
-                </div>
             </div>
         </div>
 

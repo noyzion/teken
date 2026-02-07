@@ -80,12 +80,6 @@ http://localhost:5000
 - Edit assignments: replace a soldier in a slot or swap all assignments between two soldiers
 - Highlight all occurrences of a soldier on click
 
-### Save & Share
-- Save generated schedules
-- Load saved schedules
-- Share schedules with a share code
-- Load shared schedules
-
 ## Architecture
 
 The project follows SOLID principles:
@@ -128,16 +122,6 @@ The project follows SOLID principles:
 ### Settings
 - `GET /api/settings` – Get settings
 - `PUT /api/settings` – Update settings
-
-### Saved Schedules
-- `GET /api/savedSchedules` – List saved schedules
-- `GET /api/savedSchedules/{id}` – Get schedule by ID
-- `GET /api/savedSchedules/share/{code}` – Get schedule by share code
-- `GET /api/savedSchedules/shared` – List shared schedules
-- `POST /api/savedSchedules` – Save schedule
-- `PUT /api/savedSchedules/{id}` – Update schedule
-- `PUT /api/savedSchedules/{id}/share` – Update share status
-- `DELETE /api/savedSchedules/{id}` – Delete schedule
 
 ### Excel
 - `POST /api/ScheduleExcel/upload` – Upload Excel file for statistics

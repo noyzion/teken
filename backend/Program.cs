@@ -25,7 +25,6 @@ builder.Services.AddCors(options =>
 // Dependency Injection - Dependency Inversion Principle
 builder.Services.AddScoped<IPositionRepository, PositionRepository>();
 builder.Services.AddScoped<ISoldierRepository, SoldierRepository>();
-builder.Services.AddScoped<ISavedScheduleRepository, SavedScheduleRepository>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 
