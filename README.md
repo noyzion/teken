@@ -1,147 +1,144 @@
-# מערכת ניהול משמרות
+# Guard Duty Scheduler
 
-מערכת ווב לניהול חלוקת משמרות בין חיילים עם תמיכה באילוצים מורכבים ואלגוריתם שיבוץ אוטומטי.
+Web application for managing guard duty assignments among soldiers, with support for complex constraints and an automatic scheduling algorithm.
 
-## טכנולוגיות
+## Tech Stack
 
 - **Backend**: C# ASP.NET Core 8.0
 - **Frontend**: HTML, CSS, JavaScript
-- **Data Storage**: JSON Files
-- **Architecture**: SOLID Principles
+- **Data Storage**: JSON files
+- **Architecture**: SOLID principles
 
-## מבנה הפרויקט
+## Project Structure
 
 ```
 teken/
 ├── backend/                       # Backend API
-│   ├── Controllers/               # API Controllers
-│   ├── Services/                  # Business Logic
-│   ├── Repositories/              # Data Access Layer
-│   ├── Interfaces/                # Contracts & Interfaces
-│   └── Models/                    # Data Models
-├── frontend/                      # Frontend Application
+│   ├── Controllers/               # API controllers
+│   ├── Services/                  # Business logic (scheduling, settings)
+│   ├── Repositories/             # Data access (JSON)
+│   ├── Interfaces/               # Contracts and interfaces
+│   └── Models/                   # Data models
+├── frontend/                     # Frontend application
 │   ├── index.html
 │   ├── styles.css
 │   └── app.js
-└── Data/                          # JSON Data Files (auto-generated)
+└── Data/                         # JSON data files (auto-generated at runtime)
 ```
 
-## דרישות מערכת
+## Requirements
 
-- .NET 8.0 SDK או חדש יותר
-- דפדפן מודרני (Chrome, Firefox, Edge)
+- .NET 8.0 SDK or newer
+- Modern browser (Chrome, Firefox, Edge)
 
-## התקנה והפעלה
+## Installation & Run
 
-1. שכפל את הפרויקט:
+1. Clone the repository:
 ```bash
 git clone <repository-url>
 cd teken
 ```
 
-2. הפעל את השרת:
+2. Run the server:
 ```bash
 cd backend
 dotnet run
 ```
 
-3. פתח דפדפן וגש ל:
+3. Open a browser and go to:
 ```
 http://localhost:5000
 ```
 
-## תכונות עיקריות
+## Features
 
-### ניהול עמדות
-- הגדרת עמדות שונות (ש.ג, אחורי, כ"כ, משק תורן וכו')
-- סימון עמדות שדורשות מפקד
-- הגדרת עמדות כ"כ (כוננות) לעומת עמדות שמירה
+### Positions
+- Define positions (e.g. Sh.G., Achori, standby, etc.)
+- Mark positions that require a commander
+- Distinguish standby (continuous) vs guard (requires gap between shifts) positions
 
-### ניהול חיילים
-- הוספת חיילים (תמיכה בהדבקת רשימה מרובה)
-- סימון חיילים כמפקדים
-- ניהול אילוצים לכל חייל:
-  - ימים שלמים שהחייל לא נמצא
-  - שעות אסורות לפי יום (0-23)
-  - עמדות אסורות
+### Soldiers
+- Add soldiers (supports pasting a list)
+- Mark soldiers as commanders
+- Per-soldier constraints:
+  - Forbidden days of the week
+  - Forbidden hours by day (0–23)
+  - Forbidden positions
 
-### יצירת לוח זמנים
-- הגדרת טווח תאריכים
-- הגדרת שעות התחלה וסיום (אופציונלי)
-- אלגוריתם שיבוץ אוטומטי עם:
-  - מרווח מקסימלי בין משמרות שמירה 
-  - עדיפות לחיילים שיורדים משמירה לכוננות 
-  - כיבוד כל האילוצים המוגדרים
-  - הבטחת מילוי כל המשבצות
+### Schedule Generation
+- Set date range
+- Optional start/end hours
+- Automatic scheduling with:
+  - Maximum gap between guard shifts
+  - Preference for soldiers coming off guard into standby
+  - All constraints respected
+  - All slots filled
 
-### צפייה ועריכה
-- תצוגת לוח זמנים בטבלה מפורטת
-- סטטיסטיקות לכל חייל:
-  - סה"כ משמרות
-  - סה"כ שמירות
-  - רווח ממוצע בין משמרות
-  - רווח מקסימלי בין משמרות
-- עריכת שיבוצים:
-  - החלפת חייל בשעה ספציפית
-  - החלפת חייל בכל המשמרות שלו
-- הדגשת כל ההופעות של חייל בלחיצה
+### View & Edit
+- Schedule view in a detailed table
+- Per-soldier stats: total shifts, guard count, night guards, average/min/max gap
+- Edit assignments: replace a soldier in a slot or swap all assignments between two soldiers
+- Highlight all occurrences of a soldier on click
 
-### שמירה ושיתוף
-- שמירת לוחות זמנים שנוצרו
-- טעינת לוחות זמנים שמורים
-- שיתוף לוחות זמנים עם קוד שיתוף
-- טעינת לוחות זמנים משותפים
+### Save & Share
+- Save generated schedules
+- Load saved schedules
+- Share schedules with a share code
+- Load shared schedules
 
-## ארכיטקטורה
+## Architecture
 
-הפרויקט בנוי לפי עקרונות SOLID:
+The project follows SOLID principles:
 
-- **Single Responsibility**: כל מחלקה אחראית על תפקיד אחד
-- **Open/Closed**: פתוח להרחבה, סגור לשינוי
-- **Liskov Substitution**: ממשקים ניתנים להחלפה
-- **Interface Segregation**: ממשקים ממוקדים
-- **Dependency Inversion**: תלות בממשקים, לא במימוש
+- **Single Responsibility**: Each class has one responsibility
+- **Open/Closed**: Open for extension, closed for modification
+- **Liskov Substitution**: Interfaces are substitutable
+- **Interface Segregation**: Focused interfaces
+- **Dependency Inversion**: Depend on interfaces, not implementations
 
-### שכבות
+### Layers
 
-- **Controllers**: נקודות קצה של ה-API
-- **Services**: לוגיקה עסקית (שיבוץ, הגדרות)
-- **Repositories**: גישה לנתונים (JSON)
-- **Interfaces**: חוזים וממשקים
-- **Models**: מודלי נתונים
+- **Controllers**: API endpoints
+- **Services**: Business logic (scheduling, settings)
+- **Repositories**: Data access (JSON)
+- **Interfaces**: Contracts and interfaces
+- **Models**: Data models
 
 ## API Endpoints
 
-### עמדות
-- `GET /api/positions` - קבלת כל העמדות
-- `POST /api/positions` - יצירת עמדה חדשה
-- `PUT /api/positions/{id}` - עדכון עמדה
-- `DELETE /api/positions/{id}` - מחיקת עמדה
-- `DELETE /api/positions/bulk` - מחיקה מרובה
+### Positions
+- `GET /api/positions` – List all positions
+- `POST /api/positions` – Create position
+- `PUT /api/positions/{id}` – Update position
+- `DELETE /api/positions/{id}` – Delete position
+- `DELETE /api/positions/bulk` – Bulk delete
 
-### חיילים
-- `GET /api/soldiers` - קבלת כל החיילים
-- `POST /api/soldiers` - יצירת חייל חדש
-- `PUT /api/soldiers/{id}` - עדכון חייל
-- `DELETE /api/soldiers/{id}` - מחיקת חייל
+### Soldiers
+- `GET /api/soldiers` – List all soldiers
+- `POST /api/soldiers` – Create soldier
+- `PUT /api/soldiers/{id}` – Update soldier
+- `DELETE /api/soldiers/{id}` – Delete soldier
 
-### לוח זמנים
-- `POST /api/schedule/generate` - יצירת לוח זמנים
-- `GET /api/schedule` - קבלת הלוח הנוכחי
-- `POST /api/schedule/replace` - החלפת שיבוץ
-- `POST /api/schedule/swap` - החלפת כל השיבוצים של שני חיילים
+### Schedule
+- `POST /api/schedule/generate` – Generate schedule
+- `GET /api/schedule` – Get current schedule
+- `POST /api/schedule/replace` – Replace assignment
+- `POST /api/schedule/swap` – Swap all assignments of two soldiers
 
-### הגדרות
-- `GET /api/settings` - קבלת הגדרות
-- `PUT /api/settings` - עדכון הגדרות
+### Settings
+- `GET /api/settings` – Get settings
+- `PUT /api/settings` – Update settings
 
-### לוחות זמנים שמורים
-- `GET /api/savedSchedules` - קבלת כל הלוחות השמורים
-- `GET /api/savedSchedules/{id}` - קבלת לוח לפי ID
-- `GET /api/savedSchedules/share/{code}` - קבלת לוח לפי קוד שיתוף
-- `GET /api/savedSchedules/shared` - קבלת כל הלוחות המשותפים
-- `POST /api/savedSchedules` - שמירת לוח חדש
-- `PUT /api/savedSchedules/{id}` - עדכון לוח
-- `PUT /api/savedSchedules/{id}/share` - עדכון סטטוס שיתוף
-- `DELETE /api/savedSchedules/{id}` - מחיקת לוח
-.
+### Saved Schedules
+- `GET /api/savedSchedules` – List saved schedules
+- `GET /api/savedSchedules/{id}` – Get schedule by ID
+- `GET /api/savedSchedules/share/{code}` – Get schedule by share code
+- `GET /api/savedSchedules/shared` – List shared schedules
+- `POST /api/savedSchedules` – Save schedule
+- `PUT /api/savedSchedules/{id}` – Update schedule
+- `PUT /api/savedSchedules/{id}/share` – Update share status
+- `DELETE /api/savedSchedules/{id}` – Delete schedule
+
+### Excel
+- `POST /api/ScheduleExcel/upload` – Upload Excel file for statistics
+- `GET /api/ScheduleExcel/template` – Download empty Excel template

@@ -289,7 +289,7 @@ function displayPositions() {
                 <div>
                 <strong>${pos.name}</strong>
                     ${pos.requiresCommander ? '<span style="margin-right: 8px; padding: 4px 8px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 0.85em; font-weight: 600;">דורש מפקד</span>' : ''}
-                    ${pos.isStandby ? '<span style="margin-right: 8px; padding: 4px 8px; background: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 0.85em; font-weight: 600;">כוננות</span>' : '<span style="margin-right: 8px; padding: 4px 8px; background: #fce7f3; color: #831843; border-radius: 6px; font-size: 0.85em; font-weight: 600;">שמירה</span>'}
+                    ${pos.isStandby ? '<span style="margin-right: 8px; padding: 4px 8px; background: #dcfce7; color: #166534; border-radius: 6px; font-size: 0.85em; font-weight: 600;">כוננות</span>' : '<span style="margin-right: 8px; padding: 4px 8px; background: #d1fae5; color: #065f46; border-radius: 6px; font-size: 0.85em; font-weight: 600;">שמירה</span>'}
                 </div>
             </div>
             <div class="actions">
@@ -555,14 +555,14 @@ function displaySoldiers() {
     const commandersCount = soldiers.filter(s => s.isCommander).length;
 
     list.innerHTML = `
-        <div style="margin-bottom: 15px; padding: 12px; background: #f0f9ff; border-radius: 8px; color: #0369a1; font-weight: 500;">
+        <div style="margin-bottom: 15px; padding: 12px; background: #dcfce7; border-radius: 8px; color: #166534; font-weight: 500;">
             סה"כ ${soldiers.length} חיילים ${commandersCount > 0 ? `(${commandersCount} מפקדים)` : ''}
         </div>
         ${soldiers.map(soldier => `
         <div class="list-item">
             <div class="info">
                 <strong>${soldier.name}</strong>
-                ${soldier.isCommander ? '<span style="margin-right: 8px; padding: 4px 8px; background: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 0.85em; font-weight: 600;">מפקד</span>' : ''}
+                ${soldier.isCommander ? '<span style="margin-right: 8px; padding: 4px 8px; background: #dcfce7; color: #166534; border-radius: 6px; font-size: 0.85em; font-weight: 600;">מפקד</span>' : ''}
             </div>
             <div class="actions">
                 <label class="checkbox-label" style="margin-left: 10px; margin-right: 10px;">
@@ -838,7 +838,7 @@ function addHourRangeUI(startDay, startHour, endHour, endDay) {
     
     rangeDiv.innerHTML = `
         <div style="width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <span style="font-weight: 600; color: #6366f1; min-width: 80px;">טווח ${rangeNumber}:</span>
+            <span style="font-weight: 600; color: #2d5016; min-width: 80px;">טווח ${rangeNumber}:</span>
             <span style="font-weight: 500;">מ:</span>
             ${startDaySelect}
             ${startHourSelect}
@@ -869,7 +869,7 @@ function updateRangeNumbers() {
     
     const ranges = container.querySelectorAll('.hour-range-item');
     ranges.forEach((range, index) => {
-        const numberSpan = range.querySelector('span[style*="color: #6366f1"]');
+        const numberSpan = range.querySelector('span[style*="color: #2d5016"]');
         if (numberSpan) {
             numberSpan.textContent = `טווח ${index + 1}:`;
         }
@@ -1430,16 +1430,16 @@ function displaySchedule() {
     // Generate pastel colors for positions
     const positionColors = {};
     const pastelPositionColors = [
-        '#fce7f3', // Pink pastel
-        '#e0e7ff', // Blue pastel
+        '#dcfce7', // Green pastel
+        '#d1fae5', // Light green
+        '#bbf7d0', // Mint
+        '#86efac', // Pale green
         '#fef3c7', // Yellow pastel
-        '#d1fae5', // Green pastel
-        '#fde68a', // Light yellow pastel
-        '#e9d5ff', // Purple pastel
+        '#fde68a', // Light yellow
         '#fed7aa', // Orange pastel
-        '#bae6fd', // Light blue pastel
-        '#c7d2fe', // Indigo pastel
-        '#fecdd3'  // Rose pastel
+        '#e9d5ff', // Lavender (soft)
+        '#fecdd3', // Rose pastel
+        '#bbf7d0'  // Pale green (fallback)
     ];
     allPositions.forEach((pos, index) => {
         positionColors[pos.id] = pastelPositionColors[index % pastelPositionColors.length];
@@ -1451,22 +1451,22 @@ function displaySchedule() {
     // Generate colors for soldiers
     const soldierColors = {};
     const soldierColorPalette = [
-        '#3b82f6', // Blue
+        '#2d5016', // Dark green
+        '#166534', // Green
+        '#15803d', // Forest
+        '#16a34a', // Emerald
+        '#22c55e', // Lime
+        '#4a7c23', // Olive
+        '#556b2f', // Army green
+        '#65a30d', // Leaf
+        '#84cc16', // Lime green
         '#ef4444', // Red
-        '#10b981', // Green
         '#f59e0b', // Amber
-        '#8b5cf6', // Purple
-        '#ec4899', // Pink
-        '#06b6d4', // Cyan
-        '#84cc16', // Lime
         '#f97316', // Orange
-        '#6366f1', // Indigo
         '#14b8a6', // Teal
-        '#a855f7', // Violet
-        '#22c55e', // Emerald
-        '#eab308', // Yellow
-        '#06b6d4', // Sky
-        '#d946ef'  // Fuchsia
+        '#06b6d4', // Cyan
+        '#22c55e', // Green
+        '#eab308'  // Yellow
     ];
     allSoldiers.forEach((soldier, index) => {
         soldierColors[soldier.id] = soldierColorPalette[index % soldierColorPalette.length];
@@ -2208,7 +2208,7 @@ function displaySavedSchedules() {
                         <div style="font-size: 0.85em; color: #9ca3af;">
                             <div>נוצר: ${createdDate} ${s.createdBy || s.CreatedBy ? `על ידי ${s.createdBy || s.CreatedBy}` : ''}</div>
                             ${modifiedDate ? `<div>עודכן: ${modifiedDate}</div>` : ''}
-                            ${s.isShared || s.IsShared ? `<div style="color: #3b82f6; margin-top: 5px;">🔗 משותף - קוד: ${s.shareCode || s.ShareCode}</div>` : ''}
+                            ${s.isShared || s.IsShared ? `<div style="color: #166534; margin-top: 5px;">🔗 משותף - קוד: ${s.shareCode || s.ShareCode}</div>` : ''}
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; flex-direction: column;">
@@ -2244,14 +2244,14 @@ async function loadSharedSchedules() {
             list.innerHTML = shared.map(s => {
                 const createdDate = new Date(s.createdAt || s.CreatedAt).toLocaleDateString('he-IL');
                 return `
-                    <div class="shared-schedule-item" style="border: 1px solid #3b82f6; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #eff6ff;">
+                    <div class="shared-schedule-item" style="border: 1px solid #2d5016; border-radius: 8px; padding: 15px; margin-bottom: 15px; background: #f0fdf4;">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
                                 <h4 style="margin: 0 0 10px 0; color: #1f2937;">${s.name || s.Name}</h4>
                                 ${s.description || s.Description ? `<p style="margin: 0 0 10px 0; color: #6b7280; font-size: 0.9em;">${s.description || s.Description}</p>` : ''}
                                 <div style="font-size: 0.85em; color: #9ca3af;">
                                     <div>נוצר: ${createdDate} ${s.createdBy || s.CreatedBy ? `על ידי ${s.createdBy || s.CreatedBy}` : ''}</div>
-                                    <div style="color: #3b82f6; margin-top: 5px; font-weight: 600;">קוד שיתוף: ${s.shareCode || s.ShareCode}</div>
+                                    <div style="color: #166534; margin-top: 5px; font-weight: 600;">קוד שיתוף: ${s.shareCode || s.ShareCode}</div>
                                 </div>
                             </div>
                             <button class="btn-primary" onclick="loadSharedScheduleByCode('${s.shareCode || s.ShareCode}')" style="white-space: nowrap;">

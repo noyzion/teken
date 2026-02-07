@@ -40,8 +40,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Serve static files from frontend directory (at project root)
-var frontendPath = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "frontend");
+// Serve static files from frontend directory (sibling of backend)
+var frontendPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "frontend"));
 if (Directory.Exists(frontendPath))
 {
     app.UseStaticFiles(new StaticFileOptions
